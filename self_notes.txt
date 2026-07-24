@@ -1,0 +1,16 @@
+BM25 retriever - Keyword based search algorithm
+
+BM25 is a ranking algorithm for lexical retrieval that scores documents by keyword relevance 
+using term frequency, inverse document frequency, and length normalization.
+
+meta data filtering
+embeddings
+vector db or chroma dbtokens
+LLM
+agent
+RAG
+MCP
+langchain or lang-graph
+semantic search
+data loader
+scoring

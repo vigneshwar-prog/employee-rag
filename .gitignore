@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Vector store (rebuildable via index.py)
+chroma_db/
+
+# Corporate CA roots — machine/network specific, do not commit
+certs/
+
+# Data (contains employee PII)
+data/*.xlsx
+
+# HF model cache (large, rebuildable)
+.cache/
+
+# Local environment / OS files
+.env
+.env.*
+.DS_Store

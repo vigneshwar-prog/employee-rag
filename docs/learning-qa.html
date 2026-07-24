@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee RAG Learning Q&A</title>
+  <style>
+    :root {
+      --bg: #f6f6f2;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --border: #d1d5db;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 0% 0%, #e6fffa 0%, transparent 35%),
+        radial-gradient(circle at 100% 100%, #ecfeff 0%, transparent 35%),
+        var(--bg);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 16px 64px;
+    }
+
+    header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 2rem;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 1.4rem;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: -6px;
+      margin-bottom: 12px;
+    }
+
+    .highlight {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 10px 12px;
+      border-radius: 6px;
+    }
+
+    ul, ol { margin-top: 6px; }
+
+    .qa {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    footer {
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    code {
+      background: #f3f4f6;
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Employee RAG Learning Q&A</h1>
+      <p class="subtitle">Your running notes for concepts, interview questions, and answers.</p>
+    </header>
+
+    <section class="card">
+      <h2>How to Use This File</h2>
+      <ol>
+        <li>Every new concept we learn gets a new lesson card.</li>
+        <li>Each card includes meaning, example, interview answer, and checkpoint questions.</li>
+        <li>You can write your own answers under each checkpoint to revise later.</li>
+      </ol>
+      <p class="highlight"><strong>Update rule:</strong> After each teaching step, we append to this file so your revision material stays in one place.</p>
+    </section>
+
+    <section class="card" id="lesson-001">
+      <h2>Lesson 001: BM25 Retriever</h2>
+      <p class="meta">Date: 2026-07-24</p>
+
+      <h3>What It Is</h3>
+      <p>BM25 is a keyword-based retrieval algorithm. It ranks documents by how well their words match the query words.</p>
+
+      <h3>How It Scores (Simple)</h3>
+      <ul>
+        <li>Higher score if important query words appear in a document.</li>
+        <li>Higher score for rare words (rare words are more informative).</li>
+        <li>Controls document length so very long text does not always win.</li>
+      </ul>
+
+      <h3>Why It Is Useful</h3>
+      <ul>
+        <li>Fast and reliable when query words and data words are similar.</li>
+        <li>No embeddings required.</li>
+        <li>Great for exact terms like names, project labels, and technologies.</li>
+      </ul>
+
+      <h3>Limitation</h3>
+      <p>BM25 does not understand meaning like embeddings do. If query uses synonyms not present in data text, BM25 can miss good results.</p>
+
+      <h3>Interview-Ready One-Liner</h3>
+      <p class="highlight">BM25 is a lexical ranking function that retrieves documents using keyword relevance, balancing term frequency, inverse document frequency, and length normalization.</p>
+
+      <div class="qa">
+        <h3>Checkpoint Questions</h3>
+        <ol>
+          <li>If query and data use different words with same meaning, which works better: BM25 or vector retrieval? Why?</li>
+          <li>Why should long documents not automatically get higher relevance scores?</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="card" id="lesson-002">
+      <h2>Lesson 002: Embedding Model Options for This Project</h2>
+      <p class="meta">Date: 2026-07-24</p>
+
+      <h3>What Is an Embedding Model?</h3>
+      <p>An embedding model converts text into a numeric vector so we can compare meaning using vector similarity search.</p>
+
+      <h3>Options We Can Use Here</h3>
+      <ul>
+        <li><strong>text-embedding-3-small</strong> (through local gate at localhost:8080): ideal when gate embeddings endpoint is healthy.</li>
+        <li><strong>text-embedding-ada-002</strong> (through local gate): older option if served by the same embeddings endpoint.</li>
+        <li><strong>all-MiniLM-L6-v2</strong> (local sentence-transformers): reliable local option when gate embeddings are unavailable.</li>
+      </ul>
+
+      <h3>Quick Comparison</h3>
+      <ul>
+        <li><strong>Quality:</strong> text-embedding-3-small is usually better than ada-002 for modern retrieval use cases.</li>
+        <li><strong>Operational simplicity:</strong> gate-based models are easiest only when the embeddings endpoint works in your environment.</li>
+        <li><strong>Reliability:</strong> all-MiniLM-L6-v2 runs locally and avoids dependency on gate embeddings availability.</li>
+        <li><strong>Project fit:</strong> with only about 97 rows, all three can work; hybrid retrieval design matters more than tiny embedding differences.</li>
+      </ul>
+
+      <h3>Recommended Choice</h3>
+      <p class="highlight">Current project decision: use <strong>all-MiniLM-L6-v2</strong> as primary because gate embeddings are not working in your setup.</p>
+
+      <h3>Interview-Ready One-Liner</h3>
+      <p class="highlight">For this environment, I selected all-MiniLM-L6-v2 because it is stable and local; with a small structured dataset, hybrid retrieval design contributes more to accuracy than switching embedding providers.</p>
+
+      <div class="qa">
+        <h3>Checkpoint Questions</h3>
+        <ol>
+          <li>Why is all-MiniLM-L6-v2 a practical choice for your current environment?</li>
+          <li>If the gate embeddings endpoint starts working later, what benchmark would you run before switching back?</li>
+          <li>For this dataset, why does hybrid retrieval matter more than changing embedding models?</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="card" id="template-next-lesson">
+      <h2>Template for Next Lesson</h2>
+      <p class="meta">Copy this structure for each new concept.</p>
+      <ul>
+        <li><strong>Concept name</strong></li>
+        <li><strong>What it is</strong></li>
+        <li><strong>Why it matters in this project</strong></li>
+        <li><strong>Simple example</strong></li>
+        <li><strong>Interview one-liner</strong></li>
+        <li><strong>2-3 checkpoint questions</strong></li>
+      </ul>
+    </section>
+
+    <footer>
+      File: docs/learning-qa.html
+    </footer>
+  </main>
+</body>
+</html>

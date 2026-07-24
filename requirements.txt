@@ -1,0 +1,21 @@
+# Employee RAG — Phase 0 dependencies
+# Orchestration
+langchain
+langchain-community
+langchain-openai
+langchain-chroma
+
+# Vector store
+chromadb
+
+# Embeddings — local, runs on CPU (gate does NOT serve /v1/embeddings; see Session Log)
+# LLM still uses the gate; only embeddings are local.
+langchain-huggingface
+sentence-transformers
+
+# Data loading (Excel)
+pandas
+openpyxl
+
+# Interface (Phase 5)
+streamlit
