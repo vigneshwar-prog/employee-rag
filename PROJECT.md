@@ -25,6 +25,15 @@ The system retrieves relevant employee records and an LLM generates a grounded a
 - **Style:** Step-by-step, understand each concept before moving on.
 - **Level:** Beginner-to-intermediate in Gen AI; comfortable with Python basics.
 
+## 🛠️ Tooling — how we work (two AI assistants, split by job)
+- **GitHub Copilot (in-editor):** learner's side-channel — inline explanations, quick questions,
+  and **note-taking**. Owns the learner's own notes (keep them in a separate `NOTES.md`, *not* PROJECT.md).
+- **Claude Code (terminal):** owns **development + PROJECT.md + `src/`**. Builds each phase *with* the
+  learner — explains the "why," pauses on the concept — rather than dumping finished files.
+- **Rules to avoid drift:** (1) Only Claude edits PROJECT.md and `src/` so the source of truth stays
+  coherent. (2) Don't hand-edit a file while Claude is writing to it. (3) `git commit` at every phase
+  boundary so either tool's mistakes roll back one phase, not the whole project.
+
 ---
 
 ## 🧠 RAG Concepts to Learn (the "why")

@@ -37,7 +37,7 @@ Full rationale and manual curl steps: `docs/verify-gate.md`. Override with env v
 
 ## Run (once code exists)
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt   # requirements.txt not created yet (Phase 0)
+python3.14 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 python src/main.py
 ```
