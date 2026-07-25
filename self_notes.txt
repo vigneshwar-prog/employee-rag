@@ -14,3 +14,152 @@ langchain or lang-graph
 semantic search
 data loader
 scoring
+
+
+
+
+----- playground logs -----
+
+(.venv) vigneshwar@VIGBALAM-M-0VNW src % python3 index.py
+Building index -> /Users/vigneshwar/Documents/AI/employee-rag/chroma_db  (model: all-MiniLM-L6-v2)
+Loading weights: 100%|█████████████████████████████████████████████| 103/103 [00:00<00:00, 10437.63it/s]
+Indexed 97 employees.
+
+Semantic search test — query: 'who keeps the network reliable and monitored?'
+  - Yuvraj Sharma | Network Monitoring (NMS)
+  - Nora Sharma     | Network Monitoring (NMS)
+  - Vivaan Sharma              | Network Monitoring (NMS)
+(.venv) vigneshwar@VIGBALAM-M-0VNW src % python3 index.py
+Building index -> /Users/vigneshwar/Documents/AI/employee-rag/chroma_db  (model: all-MiniLM-L6-v2)
+Loading weights: 100%|█████████████████████████████████████████████| 103/103 [00:00<00:00, 19661.10it/s]
+Indexed 97 employees.
+
+Semantic search test — enter a question (or 'q' to quit): what do vignesh do in the team ?
+
+Semantic search test — query: 'what do vignesh do in the team ?'
+  - Vigneshwar B         | Automation
+  - Parth Sharma       | Automation
+  - Siddharth Sharma      | Optics
+
+Semantic search test — enter a question (or 'q' to quit): who is vignesh manager ?
+
+Semantic search test — query: 'who is vignesh manager ?'
+  - Vigneshwar B         | Automation
+  - Anika Sharma      | Cloud Networking
+  - Neha Sharma | MPLS
+
+Semantic search test — enter a question (or 'q' to quit): manager of vignesh ?
+
+Semantic search test — query: 'manager of vignesh ?'
+  - Vigneshwar B         | Automation
+  - Anika Sharma      | Cloud Networking
+  - Amit Sharma         | R&S (Routing & Switching)
+
+Semantic search test — enter a question (or 'q' to quit): who do automation ?
+
+Semantic search test — query: 'who do automation ?'
+  - Aryan Sharma | Automation
+  - Amaira Sharma       | Automation
+  - Sana Sharma    | Automation
+
+Semantic search test — enter a question (or 'q' to quit): manager
+
+Semantic search test — query: 'manager'
+  - Shaurya Sharma | Automation
+  - Anika Sharma      | Cloud Networking
+  - Amit Sharma         | R&S (Routing & Switching)
+
+Semantic search test — enter a question (or 'q' to quit): who is vigneshwar B's Manager ?
+
+Semantic search test — query: "who is vigneshwar B's Manager ?"
+  - Vigneshwar B         | Automation
+  - Om Sharma         | MPLS
+  - Amit Sharma         | R&S (Routing & Switching)
+
+Semantic search test — enter a question (or 'q' to quit): 
+
+
+ The crucial insight
+
+  ▎ Semantic search retrieves cards that are on the same topic as your question. It does not answer the
+  ▎ question.
+
+  "who does automation?" works by luck of overlap — the card literally says "specializing in Automation,"
+  so topic ≈ answer. But "who is X's manager?" needs the retriever to:
+  - understand that "vignesh" is the subject,
+  - find his card,
+  - read the manager field off it,
+  - and return that other person.
+
+  The lesson hiding in these scores
+
+  Look at the "who does automation?" results:
+  Amaira Sharma  distance 1.04  relevance 0.264
+  Aryan         distance 1.04  relevance 0.262
+  Sana       distance 1.10  relevance 0.226
+  All three are very close together (1.04, 1.04, 1.10). The model is saying "these three are all about
+  equally good matches" — which is true, they're all Automation people. Tight clustering = "several
+  genuinely similar hits."
+
+  Now "who is vigneshwar B's manager?":
+  Vigneshwar B   distance 0.91  relevance 0.355   ← big gap
+  Om Sharma   distance 1.19  relevance 0.162
+  Amit Sharma   distance 1.20  relevance 0.152
+  There's a huge gap between #1 (0.91) and #2 (1.19). The model is very confident Vigneshwar's card is
+  the match... but it's confident about the wrong thing. It correctly found the card most about
+  "vigneshwar + manager" — Vigneshwar's own card — which is exactly the trap we discussed. High
+  confidence ≠ correct answer.
+
+  ▎ Key takeaway to note down: the score measures how similar the text is, NOT whether it answers your
+  ▎ question. A confident-looking 0.355 still gave you the wrong person, because semantic similarity
+  ▎ can't do "look up X, then return X's manager."
+
+
+
+  ----- Phase 3 logs learnings ----
+
+  ⏺ There's the proof. Same question, one word different:
+
+  - "reports under Dhruv" → SEMANTIC (only "Dhruv" — not the full stored value)
+  - "reports under Dhruv Sharma" → METADATA manager==Dhruv Sharma (full value present)
+
+  The router flips purely on whether the exact stored text appears. Nothing about meaning.
+
+  So, refining your mental model
+
+  Your version:
+
+  ▎ "tries metadata first, falls back to semantic if it can't find anything"
+
+  Precise version:
+
+  ▎ "It scans the question for a known value spelled exactly as stored. If found → metadata filter (with intent cues picking the field). If the value is
+  ▎ partial/misspelled/absent → nothing to filter on → semantic fallback."
+
+  The gap in your understanding wasn't the order (you had that right) — it was what counts as "finding something." It's not "does it understand the question," it's "does the
+  exact string appear."
+
+  Why we built it this deliberately-simple way
+
+  This is a fair design for our data, but be honest about the trade-off:
+
+  Strength: 100% transparent and predictable. You can look at any question and know exactly why it routed. No ML mystery.
+
+  Weakness — you found all three:
+  - Partial names — "vignesh", "Dhruv" don't match
+  - Typos — "reportes" was fine (it's not a value), but "Dhruuv Sharma" would fail
+  - First-name-only — very natural for humans, but breaks exact matching
+
+  Here's the beautiful part — Phase 4 largely rescues this
+
+  Notice: even when routing "failed" to semantic, Vigneshwar's card still came back first for "who is vignesh" and "which project does Vignesh work in". The right data was
+  retrieved — semantic got you close enough. Then Phase 4's LLM reads those 4 cards and answers "Vigneshwar works on the MTN project." So a partial-name miss on routing often
+  still produces the right final answer, because generation reads what retrieval fetched.
+
+  That's the division of labor again: retrieval doesn't have to be perfect if generation can read the results. We keep the router simple on purpose and let the LLM absorb the
+  fuzziness.
+
+  ---
+  So — clear now? The one sentence to lock in:
+
+  ▎ The router is a literal exact-substring matcher, not an understander. "Found something" = "a stored value appears verbatim in the question."
