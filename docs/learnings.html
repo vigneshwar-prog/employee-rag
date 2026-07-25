@@ -668,6 +668,39 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       <li><code>_answer_count()</code> hands the LLM the <b>exact number</b> with "use this EXACTLY, do not
         recompute" — so tone stays friendly but the digit is Python's. Sources stay empty (a count names nobody).</li>
     </ul>
+
+    <h3>13.1 — Following one question through the code</h3>
+    <p>Trace <em>"how many people work under Aditya?"</em> end to end:</p>
+    <pre><span class="c"># 1. Router prompt now offers 3 routes. LLM reads the question, returns TEXT:</span>
+{"route":"aggregate", "field":"manager", "value":"Aditya"}
+
+<span class="c"># 2. llm_route() validates it into a PLAN DICT (was a bare tuple before):</span>
+   - grand-total case ("how many in total?")  -> {route:aggregate, field:null, value:null}
+   - else guardrail: resolve_value("Aditya") -> "Aditya Sharma"  (or None -> fallback)
+   returns {route:"aggregate", field:"manager", value:"Aditya Sharma"}
+
+<span class="c"># 3. retrieve_with_plan() does the COUNT — just len() of a metadata fetch:</span>
+   docs = store.get(where={manager:"Aditya Sharma"})   <span class="c"># the matching cards</span>
+   plan["count"] = len(docs)   <span class="ok"># = 12  ← the number is BORN here, in Python</span>
+   returns (docs, plan)
+
+<span class="c"># 4. answer() sees route==aggregate -> _answer_count():</span>
+   system prompt: "The exact count is 12. Use this number EXACTLY, do not recompute."
+   LLM writes: "Aditya currently has 12 people working under her. Want a breakdown?"</pre>
+
+    <div class="callout rec">
+      <b>The key architectural insight</b>
+      An aggregate is <b>literally a metadata filter that we <code>len()</code> instead of list</b> — same
+      <code>store.get(where=…)</code>, different final step. That's why it was cheap to add: the retrieval
+      machinery already existed, and the anti-hallucination <b>guardrail is reused, not rebuilt</b> (aggregate
+      values pass through the same <code>resolve_value()</code> snap as metadata).
+    </div>
+
+    <p><b>What made it possible:</b> widening <code>llm_route()</code>'s return from a <b>tuple</b>
+      <code>(field, value)</code> to a <b>plan dict</b> <code>{route, field, value}</code>. A tuple couldn't say
+      "count everyone, no field"; the dict lets one router express three intents (list / count-all /
+      count-filtered) with no new plumbing.</p>
+
     <div class="callout pin">
       <b>Design choices I made</b>
       (1) <b>Right behaviour</b> for "how many?" is not "I can't disclose" (not secret) nor "I don't know"

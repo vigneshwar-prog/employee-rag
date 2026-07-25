@@ -285,7 +285,8 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   in **Python** (the LLM never counts — that was the bug); `generate._answer_count()` hands the LLM the exact
   number to phrase warmly (learner chose "Python counts, LLM phrases"). Scope = single counts (total +
   filtered); group-by tables deferred to Phase 8. Verified: total→97, Aditya→12, MPLS→8; listing & semantic
-  unchanged; graceful fallback holds (LLM off → counts degrade to semantic, no crash). Docs: learnings §13.
+  unchanged; graceful fallback holds (LLM off → counts degrade to semantic, no crash). Docs: learnings §13
+(+ §13.1 "follow one question through the code" — 4-step trace + the "aggregate = a `len()`'d metadata filter" insight).
   **Lesson: Python owns the number, the LLM owns the words.** **Next:** Phase 8 — experiments & polish.
 
 ---
