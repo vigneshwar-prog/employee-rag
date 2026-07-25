@@ -27,12 +27,22 @@ Examples:
     who reports to Vignesh?
     list everyone on MPLS
     who keeps the network reliable?
-Type 'q' (or Ctrl-C / Ctrl-D) to quit.
+Type 'q' (or Ctrl-C / Ctrl-D) to quit.  Type 'reset' to clear the conversation memory.
 """
+
+# Keep the last N turns of history (N=6 turns = 12 messages). Enough for natural
+# back-references ("whom am I?", "his manager?") without bloating the prompt.
+HISTORY_TURNS = 6
 
 
 def ask_loop(store, debug: bool) -> None:
-    """Read a question, answer it, print answer + sources. Repeat until quit."""
+    """Read a question, answer it, print answer + sources. Repeat until quit.
+
+    Phase 8b — CONVERSATIONAL MEMORY: we keep a running `history` of prior
+    (question, answer) turns and pass it to answer() each time, so the model can
+    resolve back-references. Memory lives only for this session (lost on restart).
+    """
+    history = []  # [("human", q1), ("ai", a1), ("human", q2), ("ai", a2), ...]
     while True:
         try:
             question = input("Question: ").strip()
@@ -44,11 +54,15 @@ def ask_loop(store, debug: bool) -> None:
         if question.lower() in {"q", "quit", "exit"}:
             print("Bye.")
             return
+        if question.lower() in {"reset", "clear"}:
+            history.clear()
+            print("  [memory cleared]\n")
+            continue
         if not question:
             continue  # empty line -> just re-prompt
 
         try:
-            result = answer(question, store=store, debug=debug)
+            result = answer(question, store=store, debug=debug, history=history)
         except Exception as exc:
             # The most likely cause is the local gate being down/unreachable.
             print(f"\n  [error] Could not answer: {exc}")
@@ -63,6 +77,11 @@ def ask_loop(store, debug: bool) -> None:
             print(f"  Sources ({len(srcs)}): {', '.join(srcs)}\n")
         else:
             print()
+
+        # Record this turn AFTER a successful answer (so a gate error doesn't
+        # poison history), then cap to the last HISTORY_TURNS turns.
+        history += [("human", question), ("ai", result["answer"])]
+        del history[: -2 * HISTORY_TURNS]
 
 
 def main() -> None:

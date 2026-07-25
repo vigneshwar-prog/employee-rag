@@ -60,16 +60,21 @@ def get_llm() -> ChatOpenAI:
 SYSTEM_PROMPT = """You are a friendly assistant that answers questions about a team of employees.
 
 Rules:
-- Use ONLY the employee records provided below to state facts. Never use outside
-  knowledge, and never invent names, managers, projects, or technologies.
+- Use ONLY the employee records provided below AND facts already established
+  earlier in THIS conversation to state facts. Never use outside knowledge, and
+  never invent names, managers, projects, or technologies. Treat something the
+  conversation already established (e.g. the user said "I am X" and you confirmed
+  a record) as a known fact you may rely on in later turns — a follow-up like
+  "whom am I?" or "who is his manager?" should be answered from that context even
+  if this turn's auto-retrieved records don't repeat it.
 - The records below were auto-retrieved and MAY be irrelevant to the question.
   Only use the ones that genuinely match what the user asked. If none match, treat
   it as "not found" — do NOT list or recite the other records, and never imply they
   are the only employees that exist.
-- If the records do NOT contain the answer, do not guess. Instead, say politely
-  that you don't have that information in the team data, and offer a helpful next
-  step (e.g. suggest searching by manager / project / technology). Do NOT make up
-  an answer from general knowledge.
+- If NEITHER the records NOR the earlier conversation contains the answer, do not
+  guess. Instead, say politely that you don't have that information in the team
+  data, and offer a helpful next step (e.g. suggest searching by manager / project
+  / technology). Do NOT make up an answer from general knowledge.
 - Only suggest re-checking the spelling when you found NO matching record. If a
   record DOES match (even via a close/fuzzy name), just answer confidently — do
   NOT tack on a "if you meant someone else, check the spelling" caveat, as it
@@ -100,11 +105,16 @@ def format_cards(docs) -> str:
     return "\n".join(lines)
 
 
-def build_messages(question: str, docs) -> list:
-    """Assemble the chat messages: system rules + context cards + the question.
+def build_messages(question: str, docs, history=None) -> list:
+    """Assemble the chat messages: system rules + prior turns + context cards + question.
 
     This 'stuffing' of retrieved context into the prompt is the AUGMENTATION in
     Retrieval-Augmented Generation — we ground the model in *our* data.
+
+    `history` (Phase 8b) is a list of prior turns as ("human"/"ai", text) tuples.
+    We slot it BETWEEN the system rules and the current turn, so the model sees the
+    running conversation ("I am vignesh" -> ...) and can answer back-references
+    ("whom am I?"). Default None -> stateless, exactly as before.
     """
     context = format_cards(docs)
     user_prompt = (
@@ -114,6 +124,7 @@ def build_messages(question: str, docs) -> list:
     )
     return [
         ("system", SYSTEM_PROMPT),
+        *(history or []),
         ("human", user_prompt),
     ]
 
@@ -169,16 +180,17 @@ def _answer_count(question: str, plan: dict) -> str:
     return llm.invoke([("system", system), ("human", human)]).content
 
 
-def _answer_one(sub: dict, store) -> tuple[str, list[str]]:
+def _answer_one(sub: dict, store, history=None) -> tuple[str, list[str]]:
     """Produce (answer_text, sources) for ONE sub-result, reusing the exact
     single-question logic: aggregate -> _answer_count; metadata/semantic ->
-    build_messages + llm.invoke + _cited_sources.
+    build_messages + llm.invoke + _cited_sources. `history` is forwarded so
+    sub-answers are conversation-aware too.
     """
     plan, docs = sub["plan"], sub["docs"]
     question = plan.get("question", "")
     if plan.get("route") == "aggregate":
         return _answer_count(question, plan), []
-    messages = build_messages(question, docs)
+    messages = build_messages(question, docs, history=history)
     response = get_llm().invoke(messages)
     return response.content, _cited_sources(response.content, docs)
 
@@ -201,22 +213,28 @@ def _stitch(question: str, parts: list[tuple[str, str]]) -> str:
     return get_llm().invoke([("system", system), ("human", human)]).content
 
 
-def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
+def answer(question: str, store=None, k: int = 4, debug: bool = True, history=None) -> dict:
     """Full RAG: retrieve -> augment -> generate. Returns {answer, sources}.
 
     Handles COMPOUND questions (Phase 8a): retrieve_multi returns one sub-result
     per intent. A simple question yields exactly one -> behavior unchanged.
+
+    `history` (Phase 8b) is an optional list of prior ("human"/"ai", text) turns.
+    When present, the LLM sees the running conversation and can answer
+    back-references ("whom am I?"). Default None -> stateless, as before. (Note:
+    history steers GENERATION, not RETRIEVAL — the router still routes on the raw
+    question; follow-up-aware retrieval is a later 'query rewriting' step.)
     """
     subs = retrieve_multi(question, store=store, k=k, debug=debug)
 
     # --- Single-question path: identical behavior to before Phase 8a. ---
     if len(subs) == 1:
         plan, docs = subs[0]["plan"], subs[0]["docs"]
-        # AGGREGATE route: Python counted; LLM just phrases the number.
+        # AGGREGATE route: Python counted; LLM just phrases the number (no history needed).
         if plan.get("route") == "aggregate":
             return {"answer": _answer_count(question, plan), "sources": []}
         # AUGMENT + GENERATE (metadata / semantic routes).
-        messages = build_messages(question, docs)
+        messages = build_messages(question, docs, history=history)
         response = get_llm().invoke(messages)
         sources = _cited_sources(response.content, docs)
         return {"answer": response.content, "sources": sources}
@@ -224,7 +242,7 @@ def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
     # --- Compound path: answer each sub independently, then stitch. ---
     parts, sources = [], []
     for sub in subs:
-        text, src = _answer_one(sub, store)
+        text, src = _answer_one(sub, store, history=history)
         parts.append((sub["plan"].get("question", question), text))
         sources += src
     final = _stitch(question, parts)

@@ -137,10 +137,11 @@
       <a href="#ui">12 · Streamlit UI</a>
       <a href="#agg">13 · Counting (aggregation)</a>
       <a href="#decomp">14 · Query decomposition</a>
+      <a href="#memory">15 · Conversational memory</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 8a (query decomposition for multi-entity questions) · <b>Status:</b> Phases 0–7 + 8a done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, comparisons).</p>
+    <p class="status"><b>Last updated:</b> after Phase 8b (conversational memory — in-session history, CLI) · <b>Status:</b> Phases 0–7 + 8a + 8b done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, query rewriting, comparisons).</p>
   </header>
 
   <!-- 1 -->
@@ -781,6 +782,48 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       full card only for "who is / tell me about X". (2) <b>trim tails</b> — at most ONE closing offer for
       the whole reply, not a "let me know!" after every bullet. The legitimate "did you mean…?" on a genuine
       fuzzy name match is kept (that's the one case a caveat helps).
+    </div>
+  </section>
+
+  <!-- 15 · Conversational memory -->
+  <section id="memory">
+    <h2>15 · Conversational memory (in-session history)</h2>
+    <p>Playground finding: the bot had <b>no memory</b> — every turn answered from scratch.</p>
+    <pre>"I am vignesh"   -> finds Vigneshwar B        <span class="ok"># ✓</span>
+"whom am I?"     -> "I don't have info about you"  <span class="c"># ✗ forgot turn 1</span></pre>
+
+    <div class="callout">
+      <b>Root cause</b>
+      <code>build_messages()</code> returned a fresh <code>[system, human]</code> list with ONLY the
+      current question; nothing stored or replayed prior turns. Stateless was fine for independent
+      lookups but breaks any back-reference.
+    </div>
+
+    <p><b>The fix:</b> the CLI keeps a running <code>history</code> of prior turns and threads it into the
+      prompt, slotted BETWEEN the system rules and the current turn:</p>
+    <pre>[ system rules ]
+[ ("human","I am vignesh"), ("ai","...Vigneshwar B...") ]   <span class="c"># history</span>
+[ retrieved cards + current question ]                       <span class="ok"># this turn</span></pre>
+
+    <div class="callout rec">
+      <b>Memory has TWO jobs — we did one</b>
+      <b>Generation memory ✓</b> — the LLM now SEES prior turns, so "who is his manager?" resolves
+      "his" from history and answers correctly. <b>Retrieval memory ✗</b> — the router still routes on
+      the RAW question, so "whom am I?" fetches random cards (no known entity). Generation memory
+      rescues it (the answer leans on history), but a follow-up whose <i>retrieval</i> matters would miss.
+      Making retrieval follow-up-aware = <b>query rewriting</b> ("his project" → "Pari's project"
+      before retrieval) — the next step.
+    </div>
+
+    <div class="callout pin">
+      <b>Design choices I made</b>
+      (1) <b>Backwards-compatible</b>: <code>history</code> is an optional kwarg (default None) — the
+      Streamlit app, which doesn't pass it, stays stateless with zero changes. (2) <b>Capped</b> to the
+      last 6 turns so a long chat doesn't bloat the prompt. (3) <b>reset</b> command clears it (and proves
+      the memory was real). (4) <b>Prompt reconciled</b>: the "use ONLY the records" grounding rule was
+      fighting history (the model distrusted it) — reworded to "records AND facts established earlier in
+      THIS conversation", with "not found" only when NEITHER has the answer. (5) <b>In-session only</b> —
+      lost on restart; persistence is later.
     </div>
   </section>
 

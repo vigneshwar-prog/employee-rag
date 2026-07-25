@@ -197,6 +197,7 @@ Copy the file to: `data/employees.xlsx`
 - Phase 6 — Streamlit UI: ✅ Done (`src/app.py`)
 - Phase 7 — Aggregation route (count/how-many): ✅ Done (learner-found bug)
 - Phase 8a — Query decomposition (multi-entity questions): ✅ Done (learner-found bug)
+- Phase 8b — Conversational memory (in-session history, CLI): ✅ Done (learner-found gap)
 - Phase 8 — Experiments & polish: ⏳ Pending  ← next
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
@@ -315,6 +316,23 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   "did you mean…?" on a real fuzzy name match. Verified with the exact 4-part question + a "who is X" control.
   Docs: learnings §14.1. **Lesson: computation bugs → move work to Python; presentation bugs → fix the prompt.**
   **Next:** Phase 8 — experiments & polish.
+- **2026-07-26 — Session 10 (Phase 8b — Conversational memory ✅):**
+  Playground finding: no memory — "I am vignesh" then "whom am I?" → "I don't have info about you".
+  Root cause: `build_messages()` built a fresh [system, human] list each turn; nothing stored/replayed
+  prior turns. Fix (in-session history, CLI): `build_messages`/`answer`/`_answer_one` gain an OPTIONAL
+  `history` kwarg (default None → stateless, so `app.py` is unchanged); history is slotted between the
+  system rules and the current turn. `main.py`'s `ask_loop` owns a `history` list, appends (q, a) after
+  each successful answer, caps to the last 6 turns, and adds a `reset`/`clear` command. **Key gotcha:**
+  the existing "use ONLY the records" grounding rule FOUGHT history — the model distrusted earlier turns
+  and refused ("whom am I?" retrieves random cards). Reconciled the SYSTEM_PROMPT to "records AND facts
+  established earlier in THIS conversation", with "not found" only when NEITHER has the answer. After the
+  fix: "whom am I?" recalls Vigneshwar B; "who is his manager?" (after Pari) resolves the pronoun →
+  Aditya Sharma; `reset` → forgets again. **Boundary documented:** history steers GENERATION, not
+  RETRIEVAL (router still routes on the raw question) — follow-up-aware retrieval = query rewriting, the
+  next step. Verified: memory + follow-up + reset work; metadata (22)/count (97) no regression; app.py
+  stateless-unchanged. Docs: learnings §15. **Lesson: memory has two jobs — the LLM seeing history
+  (done) vs. retrieval following references (query rewriting, next); and a grounding prompt must be told
+  history is a trusted source.** **Next:** Phase 8 — experiments & polish (incl. query rewriting).
 
 ---
 
