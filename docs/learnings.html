@@ -129,10 +129,11 @@
       <a href="#p4">4 · Generation</a>
       <a href="#flaw">5 · The product flaw</a>
       <a href="#ideas">6 · My fix ideas</a>
+      <a href="#p5">7 · The interface</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 3.5 (LLM router built) · <b>Status:</b> Phases 0–4 + LLM-router upgrade done; Phase 5 (interface) next.</p>
+    <p class="status"><b>Last updated:</b> after Phase 5 (interface built) · <b>Status:</b> Phases 0–5 + LLM-router upgrade done; Phase 6 (improvements) / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -299,6 +300,22 @@ metadata:     {name, manager: Rehan Sharma, project: MTN, technology: Automation
       <tr><td><b>LLM router + validation (C)</b></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td>hallucination (guarded)</td><td>1 call</td></tr>
     </table>
     <p class="status"><b>✅ BUILT &amp; VERIFIED (Phase 3.5):</b> Idea C + guardrail is now the live router. Order: LLM router → rule-based detector → semantic (degrades gracefully if the gate is down). Real results: "reyen"→all 20, "R &amp; S"→all 8, "vignesh"→fuzzy-snapped to "Vigneshwar B" (no 0-results), "airtel account"→Airtel.</p>
+  </section>
+
+  <!-- Phase 5 -->
+  <section id="p5">
+    <span class="phase-tag">Phase 5 · Built</span>
+    <h2>7 · The interface — one front door</h2>
+    <p>All the pieces (data → index → retrieval → generation) now sit behind a single command instead of scattered <code>__main__</code> loops:</p>
+    <pre>python src/main.py            # clean Q&amp;A loop
+python src/main.py --debug    # also show the routing decision per question</pre>
+    <p>What <code>main.py</code> adds on top of the engine:</p>
+    <ul class="tight">
+      <li><b>Opens the store once</b> — embedding model + Chroma connection is the slow part, so do it a single time and reuse it for every question.</li>
+      <li><b>Debug is off by default</b> — hides the <code>[route] METADATA/SEMANTIC</code> noise for a clean UX; <code>--debug</code> flips it back on for learning.</li>
+      <li><b>Fails gracefully</b> — empty input just re-prompts; <code>q</code>/Ctrl-C/Ctrl-D quit without a traceback; a gate-down error says <em>"Is the local Claude gate up? bash scripts/check_gate.sh"</em> instead of a stack trace.</li>
+    </ul>
+    <p class="status"><b>✅ VERIFIED end-to-end:</b> "who reports to Dhruv Sharma?" → METADATA route → all 22 listed. "who keeps the network reliable?" → SEMANTIC → honest <em>"I don't know based on the data"</em> — the anti-hallucination guardrail choosing to say nothing rather than guess. That's the system being <b>correct about its own limits</b>, not broken.</p>
   </section>
 
   <!-- Glossary -->

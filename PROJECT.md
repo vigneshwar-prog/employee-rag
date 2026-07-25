@@ -130,8 +130,9 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] Verified: manager/project lookups answer in plain English; "reports to Dhruv" lists all 22;
       salary question correctly returns "I don't know based on the data" (guardrail works)
 
-### Phase 5 — Interface ⏳
-- [ ] CLI Q&A loop (`main.py`)
+### Phase 5 — Interface ✅
+- [x] CLI Q&A loop (`main.py`) — single entry point, opens store once,
+      `--debug` flag reveals the routing decision, clean quit + gate-down error
 - [ ] (Optional) Streamlit UI with a text box + sources panel
 
 ### Phase 6 — Improvements (learning extensions) ⏳
@@ -175,7 +176,7 @@ Copy the file to: `data/employees.xlsx`
 - Phase 3 — Retrieval: ✅ Done
 - Phase 4 — Generation: ✅ Done
 - Phase 3.5 — LLM Router upgrade: ✅ Done (learner's finding + idea)
-- Phase 5 — Interface: ⏳ Pending
+- Phase 5 — Interface: ✅ Done (CLI `main.py`; Streamlit still optional)
 - Phase 6 — Improvements: ⏳ Pending
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
@@ -219,6 +220,14 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   Verified: "reyen"→all 20, "R & S"→all 8, "vignesh"→snaps to "Vigneshwar B" (no 0-results), synonyms
   ("airtel account"→Airtel). Docs: added `docs/learnings.html` (playground revision log, cross-linked).
   **Next:** Phase 5 — interface (CLI, then optional Streamlit).
+- **2026-07-25 — Session 4 (Phase 5 ✅):**
+  **Phase 5** `src/main.py`: the front door. One entry point (`python src/main.py`) that opens the
+  vector store ONCE and reuses it, with a `--debug` flag to reveal the routing decision per question.
+  UX hardening: empty-input skip, clean quit on `q`/Ctrl-C/Ctrl-D (no traceback), and a friendly
+  gate-down error ("Is the local Claude gate up? bash scripts/check_gate.sh") instead of a stack trace.
+  Verified end-to-end: "who reports to Dhruv Sharma?" → METADATA route → 22 complete; "who keeps the
+  network reliable?" → SEMANTIC → honest "I don't know based on the data" (guardrail, not a wrong guess).
+  **Next:** Phase 6 (improvements) or the optional Streamlit UI.
 
 ---
 
