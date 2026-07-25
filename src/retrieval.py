@@ -86,33 +86,139 @@ def detect_filter(question: str, known: dict[str, list[str]]) -> tuple[str, str]
     return None
 
 
-def retrieve(question: str, store=None, k: int = 4, debug: bool = True):
-    """Hybrid retrieve: pick metadata filter OR semantic search for this question.
+# ============================================================================
+# LLM-ROUTER (Phase 3.5 — the upgrade from the playground finding)
+# ----------------------------------------------------------------------------
+# The rule-based detect_filter() above only matches EXACT stored values, so
+# "Reyan" (partial) or "reyen" (typo) fell through to semantic and gave wrong
+# answers. Fix: let the LLM READ the question and propose {route, field, value} —
+# it handles partials, typos, and synonyms. BUT the LLM can hallucinate a value
+# not in the data ("Vignesh" != "Vigneshwar B"), which would filter to 0 results.
+# So we NEVER trust its value blindly: we validate it against the known lists and
+# fuzzy-snap to the nearest real value, else fall back to semantic.
+# ============================================================================
+import json
+import difflib
 
-    Returns the list of matched Documents. When debug=True, prints which path was
-    taken and why — so the retriever's decision is never a black box.
+# Below this similarity ratio (0..1) we don't trust a fuzzy snap and use semantic.
+FUZZY_SNAP_THRESHOLD = 0.6
+
+
+def _router_system_prompt(known: dict[str, list[str]]) -> str:
+    """Give the LLM the known vocabulary and ask for a strict JSON routing decision."""
+    return (
+        "You are a query router for an employee database.\n"
+        f"Known managers: {known['manager']}\n"
+        f"Known projects: {known['project']}\n"
+        f"Known technologies: {known['technology']}\n\n"
+        "Decide how to answer the user's question. Reply with ONLY a JSON object:\n"
+        '{"route": "metadata" | "semantic", '
+        '"field": "name" | "manager" | "project" | "technology" | null, '
+        '"value": "<the exact known value, fixing typos/partials to the closest known value>" | null}\n\n'
+        "Use metadata when the question targets a specific manager/project/technology/person.\n"
+        "Use semantic for fuzzy/meaning questions with no specific known entity.\n"
+        "Output only the JSON, nothing else."
+    )
+
+
+def _parse_router_json(text: str) -> dict | None:
+    """Extract the JSON object from the LLM reply, tolerating stray prose/markdown."""
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1:
+        return None
+    try:
+        return json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def resolve_value(field: str, value: str, known: dict[str, list[str]]) -> str | None:
+    """Guardrail: map the LLM's proposed value to a REAL stored value, or None.
+
+    - exact (case-insensitive) match  -> that stored value
+    - otherwise fuzzy-snap to the closest known value if similar enough
+    - else None (caller falls back to semantic)
+    """
+    if not value or field not in known:
+        return None
+    candidates = known[field]
+    # 1. exact, case-insensitive
+    for c in candidates:
+        if c.lower() == value.lower():
+            return c
+    # 2. fuzzy: closest known value above the threshold
+    match = difflib.get_close_matches(value, candidates, n=1, cutoff=FUZZY_SNAP_THRESHOLD)
+    return match[0] if match else None
+
+
+def llm_route(question: str, known: dict[str, list[str]]):
+    """Ask the LLM to route; return (field, value) for metadata, or None for semantic.
+
+    Any failure (gate down, bad JSON, unvalidated value) returns None so the caller
+    degrades gracefully to the rule-based detector / semantic search.
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            base_url="http://localhost:8080/v1", api_key="unused",
+            model="claude-sonnet-5", temperature=0,
+        )
+        reply = llm.invoke(
+            [("system", _router_system_prompt(known)), ("human", question)]
+        ).content
+    except Exception:
+        return None  # gate unreachable -> let caller fall back
+
+    decision = _parse_router_json(reply)
+    if not decision or decision.get("route") != "metadata":
+        return None
+    field, raw_value = decision.get("field"), decision.get("value")
+    if field == "name":
+        # names aren't in `known` lists (97 of them); resolve against actual names.
+        real = resolve_value("name", raw_value, {"name": known["name"]})
+    else:
+        real = resolve_value(field, raw_value, known)
+    return (field, real) if real else None
+
+
+def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
+    """Hybrid retrieve, now with the LLM router as the primary decision-maker.
+
+    Routing order (each step degrades gracefully to the next):
+      1. LLM router  -> understands partials/typos/synonyms, validated to a real value
+      2. rule-based  -> exact-substring detector (works even if the gate is down)
+      3. semantic    -> fuzzy fallback when nothing filterable is found
     """
     if store is None:
         store = get_store()
 
     known = _known_values(store)
-    hit = detect_filter(question, known)
+
+    # 1. LLM router (primary). 2. rule-based detector (fallback).
+    hit = None
+    route_reason = ""
+    if use_llm:
+        hit = llm_route(question, known)
+        if hit:
+            route_reason = "LLM router"
+    if hit is None:
+        hit = detect_filter(question, known)
+        if hit:
+            route_reason = "rule-based"
 
     if hit is not None:
         field, value = hit
-        # EXACT path: Chroma `where` returns ALL records with this value — complete,
-        # no ranking, no "top-k cutoff". Perfect for "list everyone / who reports to".
         results = store.get(where={field: value})
         docs = _get_result_to_docs(results)
         if debug:
-            print(f"  [route] METADATA filter  where {field} == {value!r}  "
+            print(f"  [route] METADATA ({route_reason})  where {field} == {value!r}  "
                   f"-> {len(docs)} exact match(es)")
         return docs
 
-    # SEMANTIC path: no known value mentioned -> fall back to fuzzy similarity.
+    # 3. SEMANTIC fallback.
     docs = store.similarity_search(question, k=k)
     if debug:
-        print(f"  [route] SEMANTIC search  (no known value in question)  "
+        print(f"  [route] SEMANTIC search  (no filterable entity found)  "
               f"-> top {len(docs)}")
     return docs
 

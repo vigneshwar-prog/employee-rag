@@ -174,6 +174,7 @@ Copy the file to: `data/employees.xlsx`
 - Phase 2 — Embeddings & Indexing: ✅ Done
 - Phase 3 — Retrieval: ✅ Done
 - Phase 4 — Generation: ✅ Done
+- Phase 3.5 — LLM Router upgrade: ✅ Done (learner's finding + idea)
 - Phase 5 — Interface: ⏳ Pending
 - Phase 6 — Improvements: ⏳ Pending
 
@@ -205,6 +206,19 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   semantic search returns NMS people for "keeps the network reliable" (no keyword match — meaning match),
   and the store reopens without re-embedding. Fixed paths to be **project-root-anchored** so scripts
   run from any directory. **Next:** Phase 3 — hybrid retrieval (semantic + metadata filter).
+- **2026-07-25 — Session 3 (Phases 3, 4 & 3.5 ✅):**
+  **Phase 3** `src/retrieval.py`: hybrid router — detect known value → exact Chroma `where`;
+  else semantic. Intent cues resolve name-vs-manager ("reports to Dhruv" = her 22-person team).
+  **Phase 4** `src/generate.py`: `ChatOpenAI`→gate reads retrieved cards, answers grounded + sources;
+  anti-hallucination guardrail verified ("salary?" → "I don't know based on the data").
+  **Learner-driven finding & fix (Phase 3.5):** learner discovered pure-exact routing fails on
+  partial names / typos ("Reyan"→3 not 20) and that semantic can't do "list all" (said "all four"
+  of 8 R&S). Learner proposed **LLM-as-router**; built it with a **validation guardrail**: LLM proposes
+  `{route, field, value}` → value validated against known lists, **fuzzy-snapped** (difflib) if not exact,
+  else semantic. Graceful degrade: LLM router → rule-based detector → semantic (works even if gate down).
+  Verified: "reyen"→all 20, "R & S"→all 8, "vignesh"→snaps to "Vigneshwar B" (no 0-results), synonyms
+  ("airtel account"→Airtel). Docs: added `docs/learnings.html` (playground revision log, cross-linked).
+  **Next:** Phase 5 — interface (CLI, then optional Streamlit).
 
 ---
 

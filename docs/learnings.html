@@ -132,7 +132,7 @@
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 4 &amp; the LLM-router experiment · <b>Status:</b> Phases 0–4 done; routing upgrade = open decision.</p>
+    <p class="status"><b>Last updated:</b> after Phase 3.5 (LLM router built) · <b>Status:</b> Phases 0–4 + LLM-router upgrade done; Phase 5 (interface) next.</p>
   </header>
 
   <!-- 1 -->
@@ -298,7 +298,7 @@ metadata:     {name, manager: Rehan Sharma, project: MTN, technology: Automation
       <tr><td>Token + fuzzy (A)</td><td class="warn">~</td><td class="ok">✓</td><td class="ok">✓</td><td>low</td><td>free</td></tr>
       <tr><td><b>LLM router + validation (C)</b></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td>hallucination (guarded)</td><td>1 call</td></tr>
     </table>
-    <p class="status"><b>Open decision:</b> build Idea C (LLM router + validation) as the routing upgrade — likely folded into Phase 6.</p>
+    <p class="status"><b>✅ BUILT &amp; VERIFIED (Phase 3.5):</b> Idea C + guardrail is now the live router. Order: LLM router → rule-based detector → semantic (degrades gracefully if the gate is down). Real results: "reyen"→all 20, "R &amp; S"→all 8, "vignesh"→fuzzy-snapped to "Vigneshwar B" (no 0-results), "airtel account"→Airtel.</p>
   </section>
 
   <!-- Glossary -->
