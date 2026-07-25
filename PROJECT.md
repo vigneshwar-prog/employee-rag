@@ -324,6 +324,11 @@ SSL_CERT_FILE=$PWD/certs/keychain-roots.pem HF_HUB_DISABLE_XET=1 \
   HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2').embed_query('warmup')"
 ```
 
+**Streamlit file-watcher traceback (harmless):** `streamlit run src/app.py` logs a traceback about
+`transformers.models.tvp … torchvision`. It's Streamlit's auto-reload watcher scanning imported modules and
+tripping a lazy `transformers` vision import that needs `torchvision` (not installed). The app works fine — it
+happens at watcher scan time, not on any query. Silence with `--server.fileWatcherType none` if desired.
+
 ---
 
 ## ▶️ How to Resume a Session

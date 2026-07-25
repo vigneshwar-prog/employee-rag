@@ -626,6 +626,15 @@ else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (f
     </table>
     <p class="status"><b>✅ Verified:</b> launches headless (HTTP 200, no traceback) and the engine answers
       correctly end-to-end through app.py's import path.</p>
+    <div class="callout">
+      <b>Harmless traceback + my "done enough" call</b>
+      In dev I saw a traceback about <code>transformers.models.tvp … torchvision</code>. It's <b>not my app</b>:
+      Streamlit's file-watcher scans every imported module and pokes a lazy <code>transformers</code> vision
+      import that needs <code>torchvision</code> (not installed), so it logs and moves on — the app answers fine.
+      Silence it with <code>--server.fileWatcherType none</code> if wanted. <b>Decision:</b> Streamlit was the
+      learning goal (a UI is one option) and it's achieved — chasing a watcher warning teaches no RAG, so I'm
+      investing the time in core logic (Phase 7 aggregation, name matching) instead.
+    </div>
   </section>
 
   <!-- Glossary -->
