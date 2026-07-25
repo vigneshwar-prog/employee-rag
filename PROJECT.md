@@ -136,9 +136,17 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [ ] (Optional) Streamlit UI with a text box + sources panel
 
 ### Phase 6 — Improvements (learning extensions) ⏳
+- [ ] **Aggregation route (count / how-many)** — learner-found bug: "how many employees in
+      total?" fell to semantic → counted the 4 retrieved cards → answered "4" (real = 97).
+      Semantic/metadata can't count. Fix: add a third route `"aggregate"` to `llm_route`
+      (e.g. `{route:"aggregate", operation:"count", field:"manager"|null}`) + a Python branch
+      that does `store.get(where=...)` and returns the real count. This IS lightweight
+      tool-calling — same "LLM decides, Python executes" pattern already in `llm_route()`.
+      Covers "how many employees", "how many under X", "how many on MPLS".
+- [ ] (Later) Full framework-based tool/function calling for richer ops beyond count.
+- [ ] Robust name matching: phonetic (Soundex/Metaphone) so "vicky"/"vignsh" resolve reliably.
 - [ ] Compare pure-semantic vs hybrid on "list everyone on MPLS"
 - [ ] Try different k; try a bigger embedding model
-- [ ] Aggregations ("how many people per manager?") via metadata
 - [ ] Add logging + simple eval questions
 
 ---

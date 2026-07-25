@@ -137,7 +137,7 @@
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after routing/security deep-dives + the "vicky" fix (sections 10–11) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt + honest citations + relevance fix done; Phase 6 / optional Streamlit UI next.</p>
+    <p class="status"><b>Last updated:</b> after the count-bug finding (section 11.5, queued for Phase 6) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt + honest citations + relevance fix done; Phase 6 (aggregation route, phonetic names) / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -579,6 +579,25 @@ else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (f
       Added a rule: the provided records may be irrelevant — use only ones that genuinely match; if none match,
       treat as "not found", never recite the others or imply they're the whole roster.
       Verified: "vicky" → clean "not found"; "vignsh" → still finds Vigneshwar B; "under Aditya" → still lists all 12.
+    </div>
+
+    <h3>11.5 — The "count" bug → a THIRD route (Phase 6 idea)</h3>
+    <div class="callout pin">
+      <b>What happened</b>
+      <em>"how many employees in total?"</em> → no known entity → semantic → returned k=4 cards → the LLM
+      counted <b>those 4</b> and answered <b>"4 employees"</b>. The real answer is <b>97</b>.
+    </div>
+    <p>Key realisation: <b>counting is an <em>aggregation</em>, and neither semantic nor a plain metadata
+      fetch is built to count.</b> It's the same shape as "list everyone on MPLS" needing metadata not
+      semantic — a whole question-category the current two routes miss.</p>
+    <p>Also a terminology fix I made for myself: the right behaviour is <b>not</b> "I can't disclose" (the total
+      isn't secret) nor "I don't know" (the system <em>does</em> know) — it's to <b>answer correctly: 97</b>.</p>
+    <div class="callout rec">
+      <b>My plan (Phase 6): add a third route</b>
+      Extend <code>llm_route()</code> to also emit <code>{route:"aggregate", operation:"count", field:…}</code>,
+      with a Python branch that does <code>store.get(where=…)</code> and returns the real count. This is
+      <b>lightweight tool-calling</b> — the exact "LLM decides, Python executes" pattern I already built (§10).
+      Full framework-based function-calling can come later for richer operations.
     </div>
   </section>
 
