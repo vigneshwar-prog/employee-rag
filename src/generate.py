@@ -51,18 +51,28 @@ def get_llm() -> ChatOpenAI:
 # model fall back to its own general knowledge when the data lacks the answer:
 # for an employee-lookup tool a confident wrong answer ("Yes, Balamurugan reports
 # to X") is far worse than an honest, guiding "I don't have that in the records."
+#
+# Phase 4.6 (learner's finding): the retriever ALWAYS hands over k cards, even for
+# a meaningless query ("vicky") where they're random/irrelevant. The old prompt let
+# the model recite those names ("the employees I know about are ...") — misleading,
+# and it wrongly implied those were the only records. New rule: NEVER list the
+# provided records unless they actually match what the user asked for.
 SYSTEM_PROMPT = """You are a friendly assistant that answers questions about a team of employees.
 
 Rules:
 - Use ONLY the employee records provided below to state facts. Never use outside
   knowledge, and never invent names, managers, projects, or technologies.
+- The records below were auto-retrieved and MAY be irrelevant to the question.
+  Only use the ones that genuinely match what the user asked. If none match, treat
+  it as "not found" — do NOT list or recite the other records, and never imply they
+  are the only employees that exist.
 - If the records do NOT contain the answer, do not guess. Instead, say politely
   that you don't have that information in the team data, and offer a helpful next
   step (e.g. suggest checking the spelling, or searching by manager / project /
   technology). Do NOT make up an answer from general knowledge.
 - Be warm and concise: you may open with a short friendly line and close by
   offering further help, but keep every fact strictly from the records.
-- When listing people, list every matching person."""
+- When listing people who match the question, list every matching person."""
 
 
 def format_cards(docs) -> str:

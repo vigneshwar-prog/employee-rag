@@ -237,6 +237,18 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   from general knowledge"). Verified on 4 questions: Pari/Aditya now friendly; "1+1" and "Balamurugan"
   stay grounded (no invented facts). Documented as learnings.html section 9. **Lesson: tone lives in the
   prompt; grounding is non-negotiable.** **Next:** Phase 6 or optional Streamlit UI.
+- **2026-07-25 — Session 6 (citations + relevance + deep-dive Q&A):**
+  Two more learner-found bugs, both fixed prompt-/filter-only:
+  (1) **Misleading sources** — semantic always returns k=4, so chitchat/"I don't know" cited 4 unrelated
+  names. Fixed with `_cited_sources()` in generate.py (refusal guard + name-mention filter) and main.py
+  omits the Sources line when empty. (2) **"vicky" relevance bug** (Phase 4.6) — for a meaningless name the
+  LLM recited the random retrieved cards as "the employees I know about". Fixed with a prompt rule: records
+  may be irrelevant, use only genuine matches, else treat as not-found and never recite the rest.
+  Also answered deep-dive questions (documented in learnings.html §10–11): how the LLM routes (decides in
+  words, Python executes via if/else — hand-built "tool calling"); security (only ~28 vocab labels sent to
+  router, not the 97 names; gate is local; risk = going cloud); name matching is **difflib character
+  similarity, NOT semantic**, with a 0.6 threshold that genuinely fails on heavy typos; and clarified the
+  "vicky" case is a **relevance bug, not a breach or prompt injection**. **Next:** Phase 6 or Streamlit UI.
 
 ---
 

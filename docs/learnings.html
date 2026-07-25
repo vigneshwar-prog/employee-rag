@@ -132,10 +132,12 @@
       <a href="#p5">7 · The interface</a>
       <a href="#embed">8 · Inside embeddings</a>
       <a href="#tone">9 · Friendly answers</a>
+      <a href="#howroute">10 · How routing works</a>
+      <a href="#security">11 · Security &amp; names</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after the source-citation fix (section 9.1) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt + honest citations done; Phase 6 / optional Streamlit UI next.</p>
+    <p class="status"><b>Last updated:</b> after routing/security deep-dives + the "vicky" fix (sections 10–11) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt + honest citations + relevance fix done; Phase 6 / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -485,6 +487,101 @@ magnitude of the vector: 1.0   <span class="c"># MiniLM normalizes to ~1.0</span
       heavily and you may need to add new cue phrases.</p>
   </section>
 
+  <!-- Section 10 — how routing works -->
+  <section id="howroute">
+    <span class="phase-tag">Deep dive · My questions</span>
+    <h2>10 · How the LLM actually picks a search</h2>
+    <p>I wanted to know: from natural language, how does it "call" one of the two searches?</p>
+    <div class="callout rec">
+      <b>The one sentence</b>
+      The LLM <b>decides in words</b>; my Python <b>acts in code</b>. The LLM never runs a search — it only
+      returns a JSON label; <code>retrieve()</code>'s <code>if/else</code> reads that label and calls the search.
+    </div>
+    <p>The flow for <em>"who works under reyen"</em>:</p>
+    <pre><span class="c"># 1. llm_route(): the LLM reads the question + known vocab, RETURNS TEXT:</span>
+{"route":"metadata", "field":"manager", "value":"Reyan Sharma"}
+
+<span class="c"># 2. Python parses it, guardrail snaps the value, returns ("manager","Reyan Sharma")</span>
+
+<span class="c"># 3. retrieve(): plain if/else — THIS is where a search is actually called</span>
+if hit:  store.get(where={field: value})          <span class="c"># METADATA (exact)</span>
+else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (fuzzy)</span></pre>
+    <ul class="tight">
+      <li>The LLM's whole job is turning messy language into a clean <code>{route, field, value}</code>.</li>
+      <li>The execution is dumb, deterministic Python — which is <em>why</em> it's reliable and why I can
+        validate/override the LLM (the guardrail) before any search runs.</li>
+      <li>This is the hand-built version of what libraries call <b>"tool / function calling"</b> — same idea:
+        model emits structured text, your code executes.</li>
+    </ul>
+  </section>
+
+  <!-- Section 11 — security & name matching -->
+  <section id="security">
+    <span class="phase-tag">Deep dive · My questions</span>
+    <h2>11 · Security, name matching &amp; the "vicky" bug</h2>
+
+    <h3>11.1 — Are we sending all the data to the LLM?</h3>
+    <p><b>No.</b> The router prompt sends only the <b>distinct categorical values</b> — 7 managers, 9 projects,
+      12 technologies (~28 short labels). It does <b>NOT</b> send the 97 names or any who-reports-to-whom
+      mapping. Full employee records reach the LLM only in the <em>generation</em> step, and only the handful
+      retrieved for that one question — never the whole DB.</p>
+    <div class="callout rec">
+      <b>Why my setup is privacy-friendly</b>
+      The gate runs at <code>localhost:8080</code>, so data stays on my machine. The LLM is stateless — it
+      reads, answers, forgets; it does not learn/memorize my data.
+      <b>Biggest productization risk = swapping the local gate for a CLOUD LLM</b> — then PII + client project
+      names cross the network boundary and you'd need a no-training guarantee, a DPA, and maybe redaction.
+    </div>
+
+    <h3>11.2 — If names aren't sent, how does "Vignesh" → "Vigneshwar B"?</h3>
+    <p>Two different actors do two different jobs:</p>
+    <ul class="tight">
+      <li><b>LLM</b> (never sees names) → can only say <em>"this is a name-type question"</em>, echoing the
+        user's typed word as the value.</li>
+      <li><b>Python</b> (has all 97 names locally) → <code>resolve_value()</code> snaps that word to the real
+        name with <code>difflib</code>. The roster never leaves the machine.</li>
+    </ul>
+
+    <h3>11.3 — Name matching is difflib, NOT semantic search</h3>
+    <table>
+      <tr><th></th><th>difflib (names use this)</th><th>Semantic (embeddings)</th></tr>
+      <tr><td>Compares</td><td>letters / characters</td><td>meaning</td></tr>
+      <tr><td>Good at</td><td>typos &amp; partials of the same word</td><td>synonyms, concepts</td></tr>
+      <tr><td>Where</td><td>Python <code>resolve_value()</code></td><td>ChromaDB vectors</td></tr>
+    </table>
+    <p>The name IS the primary key (unique id in Chroma). But matching is <b>NOT "certain every time"</b> — it
+      has a hard <code>0.6</code> threshold. Real results:</p>
+    <pre>'vigneshw'  -> Vigneshwar B   <span class="ok">✓</span>
+'vignesh'   -> Vigneshwar B   <span class="ok">✓</span>
+'vignsh'    -> None           <span class="no">✗ (below 0.6 → falls to semantic)</span>
+'vig'       -> None           <span class="no">✗ (too short)</span></pre>
+    <p>Below the threshold it drops to semantic — which for a <em>garbled name</em> is unreliable (a name has
+      no "meaning" to embed). It fails <b>safely</b> (won't invent a wrong person), but it does <b>not</b> always
+      succeed. Robust fixes are a Phase 6 idea: phonetic matching (Soundex/Metaphone), or a smarter threshold.</p>
+
+    <h3>11.4 — The "vicky" bug — and why it's NOT a breach or injection</h3>
+    <div class="callout pin">
+      <b>What happened</b>
+      Asking <em>"do you know vicky?"</em> → difflib fails → semantic returns 4 <b>random</b> cards → the LLM
+      recited them: <em>"the employees I know about are Ayaan Sharma, Kiara…"</em>. Misleading, and it
+      wrongly implied those were the only employees.
+    </div>
+    <table>
+      <tr><th>Fear</th><th>Reality</th></tr>
+      <tr><td>Security breach?</td><td class="ok">No — every name shown is in-scope data the user may query. Nothing leaked.</td></tr>
+      <tr><td>Prompt injection?</td><td class="ok">No — that's a malicious hijack ("ignore your rules"). This was a normal query hitting a weak spot.</td></tr>
+      <tr><td>What it really is</td><td class="warn">A relevance/quality bug — the LLM parroting irrelevant retrieved cards.</td></tr>
+    </table>
+    <p><b>Note:</b> the retriever ALWAYS returns k cards (even for meaningless queries). My earlier fix cleaned the
+      <code>Sources:</code> line, but the LLM was still naming them <em>inside the answer text</em>.</p>
+    <div class="callout rec">
+      <b>The fix (Phase 4.6, prompt-only)</b>
+      Added a rule: the provided records may be irrelevant — use only ones that genuinely match; if none match,
+      treat as "not found", never recite the others or imply they're the whole roster.
+      Verified: "vicky" → clean "not found"; "vignsh" → still finds Vigneshwar B; "under Aditya" → still lists all 12.
+    </div>
+  </section>
+
   <!-- Glossary -->
   <section id="glossary">
     <h2>Quick glossary (for fast revision)</h2>
@@ -493,6 +590,9 @@ magnitude of the vector: 1.0   <span class="c"># MiniLM normalizes to ~1.0</span
       <li><b>Dimension / latent feature</b> — one of the 384 numbers in a vector. Abstract &amp; unnameable; meaning lives in all of them together.</li>
       <li><b>Inference / encoding</b> — the model reading a card and outputting its vector. NOT training (the model is already trained &amp; frozen).</li>
       <li><b>Cosine similarity</b> — angle between two vectors. 1.0 = same meaning, 0 = unrelated. How semantic ranking works.</li>
+      <li><b>difflib fuzzy-snap</b> — Python CHARACTER similarity (not semantic) that maps a typed value to the closest real one, above a 0.6 threshold. Used for name/value matching, all local.</li>
+      <li><b>Tool / function calling</b> — pattern where the LLM emits structured text (a route/args) and YOUR code executes. We built it by hand in <code>llm_route()</code>.</li>
+      <li><b>Prompt injection</b> — a MALICIOUS input trying to hijack the system's instructions. Not the same as a normal query hitting a weak spot.</li>
       <li><b>Vector store (Chroma)</b> — DB that finds nearest vectors; persisted to <code>./chroma_db</code>.</li>
       <li><b>Semantic search</b> — closest-vector match. Fuzzy; capped at k; can't do "list all".</li>
       <li><b>Metadata filter</b> — exact <code>where={field:value}</code> match. Complete; needs the exact value.</li>
