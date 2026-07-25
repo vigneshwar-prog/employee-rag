@@ -101,19 +101,17 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] Copy Excel into `data/employees.xlsx`
 - [x] Confirm embeddings via local `all-MiniLM-L6-v2` (384-dim) — works, incl. fully offline from cache
 
-### Phase 1 — Data ⏳  (source: 97 rows, cols = Employee Name, Manager, Project, Technology)
-- [ ] Load with pandas via LangChain loader; inspect
-- [ ] Handle 6 rows with missing Project/Technology → fill with "Unassigned"
-- [ ] Build one **Document per employee**:
-      - `page_content` = readable card, e.g.
-        *"Ishan Sharma is managed by Dhruv Sharma, works on the Morgan Stanley project,
-        specializing in R&S (Routing & Switching)."*
-      - `metadata` = {name, manager, project, technology}  ← powers filtering
+### Phase 1 — Data ✅  (source: 97 rows, cols = Employee Name, Manager, Project, Technology)
+- [x] Load with pandas; inspect (97 rows, 4 cols confirmed) — `src/data.py`
+- [x] Handle 6 rows with missing Project/Technology → fill with "Unassigned" (they're managers, no project)
+- [x] Build one **Document per employee**: readable card (`page_content`) + `metadata`
+      = {name, manager, project, technology}. Text cells whitespace-stripped so exact filters work.
 
-### Phase 2 — Embeddings & Indexing ⏳
-- [ ] Embed cards with `all-MiniLM-L6-v2` (HuggingFaceEmbeddings)
-- [ ] Persist to Chroma on disk (`./chroma_db`); store metadata alongside
-- [ ] `index.py` re-run script (rebuild when Excel changes)
+### Phase 2 — Embeddings & Indexing ✅
+- [x] Embed cards with `all-MiniLM-L6-v2` (HuggingFaceEmbeddings) — `src/index.py`
+- [x] Persist to Chroma on disk (`./chroma_db`, collection `employees`); metadata stored alongside
+- [x] Re-runnable `index.py` (stable ids = employee name → upsert, no duplicates)
+- [x] Verified: 97 vectors, semantic search works, store reopens without re-embedding
 
 ### Phase 3 — Hybrid Retrieval ⏳  ← core learning
 - [ ] Semantic retriever: embed question, top-k similarity search
@@ -168,8 +166,8 @@ Copy the file to: `data/employees.xlsx`
 
 ## 📊 Progress Tracker
 - Phase 0 — Setup: ✅ Done
-- Phase 1 — Data: ⏳ Pending
-- Phase 2 — Embeddings & Indexing: ⏳ Pending
+- Phase 1 — Data: ✅ Done
+- Phase 2 — Embeddings & Indexing: ✅ Done
 - Phase 3 — Retrieval: ⏳ Pending
 - Phase 4 — Generation: ⏳ Pending
 - Phase 5 — Interface: ⏳ Pending
@@ -194,6 +192,15 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   **Two environment quirks captured** (see next section) — needed only for the first download on a
   machine behind the corporate SSL-inspecting proxy; irrelevant at runtime once cached.
   **Next:** Phase 1 — load Excel with pandas, fill missing → "Unassigned", build one Document/employee.
+- **2026-07-25 — Session 2 (Phases 1 & 2 ✅):** Standardized on **`.venv` (Python 3.14)**, removed the
+  duplicate `venv/` (both had full deps). Recorded the **tooling split** (Copilot=notes, Claude=dev).
+  **Phase 1** `src/data.py`: load + whitespace-strip + fill 6 missing Project/Tech → "Unassigned"
+  (the blanks are managers with no delivery project); build 97 `Document`s (card + metadata).
+  **Phase 2** `src/index.py`: embed cards with `all-MiniLM-L6-v2`, persist to `./chroma_db`
+  (collection `employees`), stable ids = employee name (upsert, no dupes). Verified 97 vectors,
+  semantic search returns NMS people for "keeps the network reliable" (no keyword match — meaning match),
+  and the store reopens without re-embedding. Fixed paths to be **project-root-anchored** so scripts
+  run from any directory. **Next:** Phase 3 — hybrid retrieval (semantic + metadata filter).
 
 ---
 

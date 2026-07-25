@@ -204,6 +204,187 @@
       </div>
     </section>
 
+    <section class="card" id="lesson-003">
+      <h2>Lesson 003: Triple-Hybrid Retrieval for This Project</h2>
+      <p class="meta">Date: 2026-07-25</p>
+
+      <h3>What Is Triple-Hybrid Retrieval?</h3>
+      <p>A retrieval strategy that combines three independent ranking methods:</p>
+      <ul>
+        <li><strong>Semantic search:</strong> embed question → find employees with similar meaning (captures intent).</li>
+        <li><strong>Keyword search (BM25):</strong> exact word matching → find employees with query terms (captures specificity).</li>
+        <li><strong>Metadata filtering:</strong> exact categorical match → find employees by manager/project/tech (captures set queries).</li>
+      </ul>
+
+      <h3>Why All Three for Your Dataset?</h3>
+      <ol>
+        <li><strong>Semantic alone misses exact terms:</strong> "List everyone on MPLS" — embeddings might find networking people but not guarantee MPLS exactly.</li>
+        <li><strong>Keyword alone misses intent:</strong> "Who handles network resilience?" — BM25 fails if data says "redundancy" not "resilience".</li>
+        <li><strong>Metadata alone is inflexible:</strong> "Tell me about the Cisco team" — no metadata column for "Cisco", but semantic+keyword find it.</li>
+      </ol>
+
+      <h3>How They Work Together (Example)</h3>
+      <p><strong>Query:</strong> "Who works on MPLS projects?"</p>
+      <ul>
+        <li>Semantic: "MPLS", "projects", "work" → embeddings find people with similar job descriptions.</li>
+        <li>Keyword (BM25): exact match on "MPLS" and "projects" in employee cards.</li>
+        <li>Metadata: filter by `technology == "MPLS"` (exact).</li>
+        <li><strong>Merged result:</strong> rank by combined score; top results appear in both semantic + keyword, OR match the metadata filter.</li>
+      </ul>
+
+      <h3>Implementation Pattern</h3>
+      <p>In LangChain:</p>
+      <ul>
+        <li>Create a <code>semantic_retriever</code> (embeddings + Chroma similarity).</li>
+        <li>Create a <code>keyword_retriever</code> (BM25 on the same documents).</li>
+        <li>Create a <code>metadata_retriever</code> (Chroma with `where` filters).</li>
+        <li>Combine all three with a <code>EnsembleRetriever</code> (merge + deduplicate + re-rank).</li>
+      </ul>
+
+      <h3>Interview-Ready One-Liner</h3>
+      <p class="highlight">For this dataset, triple-hybrid retrieval (semantic + keyword + metadata) ensures exact set queries work (metadata), synonyms are caught (semantic), and proper terms are emphasized (keyword), which pure semantic search alone cannot guarantee.</p>
+
+      <div class="qa">
+        <h3>Checkpoint Questions</h3>
+        <ol>
+          <li>Why does BM25 fail on "Who handles network resilience?" if the data says "redundancy"?</li>
+          <li>If you only used semantic search, would "List everyone on MPLS" return all 6 MPLS people? Why or why not?</li>
+          <li>In the triple-hybrid design, which retriever should run first, and why does order matter for merging?</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="card" id="lesson-004">
+      <h2>Lesson 004: Semantic vs Keyword vs Metadata — Deep Comparison</h2>
+      <p class="meta">Date: 2026-07-25</p>
+
+      <h3>Three Retrieval Methods Explained</h3>
+
+      <h4>1. Semantic Search (Embeddings)</h4>
+      <p><strong>How it works:</strong> Converts text to a vector (384 numbers for all-MiniLM-L6-v2). Finds employees with similar vectors using cosine similarity.</p>
+      <p><strong>Example query:</strong> "Who handles network resilience?"</p>
+      <ul>
+        <li>Your query is converted to vector: [0.2, -0.5, 0.8, ...]</li>
+        <li>Each employee card is also a vector: [0.19, -0.48, 0.82, ...]</li>
+        <li>Similarity = dot product / (magnitude1 × magnitude2) = 0.99 (very close!)</li>
+        <li><strong>Result:</strong> Returns employee cards about "redundancy", "failover", "high availability" because they are semantically similar to "resilience".</li>
+      </ul>
+      <p><strong>Pros:</strong> Catches synonyms, understands meaning, flexible intent.</p>
+      <p><strong>Cons:</strong> May rank irrelevant results high if they are semantically close; cannot enforce exact matching.</p>
+
+      <h4>2. Keyword Search (BM25)</h4>
+      <p><strong>How it works:</strong> Scores documents by exact word overlap. Rare words score higher. Document length normalized.</p>
+      <p><strong>Example query:</strong> "List everyone on MPLS"</p>
+      <ul>
+        <li>Query terms: ["List", "everyone", "on", "MPLS"]</li>
+        <li>Employee card 1: "Ishan works on MPLS, specializes in routing" → contains "MPLS" (1 hit, rare word = high score)</li>
+        <li>Employee card 2: "Alice on Cloud Networking" → no match (0 hits, low score)</li>
+        <li><strong>Result:</strong> Returns ALL employees mentioning "MPLS" exactly, ranked by frequency and rarity.</li>
+      </ul>
+      <p><strong>Pros:</strong> Exact term matching, high precision on proper nouns, fast.</p>
+      <p><strong>Cons:</strong> Fails on synonyms ("resilience" vs "redundancy"), requires exact word presence.</p>
+
+      <h4>3. Metadata Filtering (Chroma `where`)</h4>
+      <p><strong>How it works:</strong> Exact categorical lookup. Returns only records matching a filter.</p>
+      <p><strong>Example query:</strong> "Who reports to Dhruv Sharma?"</p>
+      <ul>
+        <li>Extract manager name from query (if recognized): "Dhruv Sharma"</li>
+        <li>Filter: `where={"manager": "Dhruv Sharma"}`</li>
+        <li><strong>Result:</strong> Returns ALL 8 employees managed by Dhruv, guaranteed 100% recall.</li>
+      </ul>
+      <p><strong>Pros:</strong> Perfect precision/recall on structured fields, instant.</p>
+      <p><strong>Cons:</strong> Only works for known categorical values, no flexibility, inflexible for natural language.</p>
+
+      <h3>Comparison Table</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 12px 0;">
+        <tr style="background: #f3f4f6;">
+          <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;"><strong>Aspect</strong></th>
+          <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;"><strong>Semantic</strong></th>
+          <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;"><strong>Keyword (BM25)</strong></th>
+          <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left;"><strong>Metadata Filter</strong></th>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Speed</strong></td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Slow (vector search over 97 rows)</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Fast (inverted index)</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Instant (hash lookup)</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Handles Synonyms?</strong></td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">✅ Yes</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">❌ No</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">N/A (not applicable)</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Exact Recall?</strong></td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">❌ Maybe (miss edge cases)</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">✅ Yes (if term exists)</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">✅ 100% (if filter applies)</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Best For</strong></td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Intent, natural language, open-ended</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Proper nouns, exact terms</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Set queries (list all X)</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #d1d5db; padding: 8px;"><strong>Fails On</strong></td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">"List all MPLS people" (incomplete)</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">"Resilience" when data says "redundancy"</td>
+          <td style="border: 1px solid #d1d5db; padding: 8px;">Any natural language query</td>
+        </tr>
+      </table>
+
+      <h3>Real Query Examples from Your Dataset</h3>
+      <p><strong>Query A: "Who works on MPLS?"</strong></p>
+      <ul>
+        <li>Semantic: ⚠️ Returns 5 out of 6 MPLS people (misses one with different wording).</li>
+        <li>BM25: ✅ Returns all 6 (exact match on "MPLS").</li>
+        <li>Metadata: ✅ Returns all 6 (exact match on technology column).</li>
+        <li><strong>Winner:</strong> BM25 or metadata alone work; semantic is weak.</li>
+      </ul>
+
+      <p><strong>Query B: "Tell me about our redundancy experts"</strong></p>
+      <ul>
+        <li>Semantic: ✅ Finds people with keywords like "failover", "resilience", "ha" (understands intent).</li>
+        <li>BM25: ❌ Returns nothing (data says "resilience" not "redundancy").</li>
+        <li>Metadata: ❌ No such column (not applicable).</li>
+        <li><strong>Winner:</strong> Semantic alone works; BM25 fails.</li>
+      </ul>
+
+      <p><strong>Query C: "Who reports to Dhruv Sharma?"</strong></p>
+      <ul>
+        <li>Semantic: ❌ Returns people who sound like they might (may include false positives).</li>
+        <li>BM25: ~ Matches "Dhruv" and "Sharma" in cards, but also returns others mentioning her.</li>
+        <li>Metadata: ✅ Exact match: `where={"manager": "Dhruv Sharma"}` → all 8 direct reports.</li>
+        <li><strong>Winner:</strong> Metadata filter guarantees precision.</li>
+      </ul>
+
+      <h3>Why Triple-Hybrid Is Optimal</h3>
+      <p>Each retriever covers cases the others fail on. By combining all three and merging results:</p>
+      <ul>
+        <li>Semantic catches intent (resilience = redundancy).</li>
+        <li>BM25 catches exact terms (MPLS = MPLS).</li>
+        <li>Metadata catches set queries (all people under Dhruv).</li>
+        <li>Merge via union (OR logic): return unique results ranked by how many retrievers found them.</li>
+      </ul>
+
+      <h3>Interview-Ready One-Liner (Updated)</h3>
+      <p class="highlight">Semantic search captures intent and synonyms, BM25 ensures exact terms are found, and metadata guarantees set queries; triple-hybrid combines them because each fails uniquely on query patterns the others handle well.</p>
+
+      <div class="qa">
+        <h3>New Checkpoint Questions</h3>
+        <ol>
+          <li>Why would "List all MPLS people" fail with only semantic search?</li>
+          <li>If you only used metadata filters, how would you answer "Tell me about our resilience work"?</li>
+          <li>Why is union (OR) the right merging strategy instead of intersection (AND)?</li>
+          <li>For the query "Tell me who currently reports to Dhruv and has MPLS experience," which parts should be hard metadata constraints and which parts should be semantic/keyword evidence?</li>
+          <li>If the user asks "people with MPLS experience" instead of "current MPLS engineers," should you still hard-filter <code>technology == "MPLS"</code> or relax it? Why?</li>
+          <li>For the query "List all people under Dhruv with MPLS experience," how would you define: (1) hard constraints, (2) soft ranking signals, and (3) final answer formatting with sources?</li>
+        </ol>
+      </div>
+    </section>
+
     <section class="card" id="template-next-lesson">
       <h2>Template for Next Lesson</h2>
       <p class="meta">Copy this structure for each new concept.</p>
