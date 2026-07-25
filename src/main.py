@@ -24,7 +24,7 @@ from generate import answer
 BANNER = """\
 Employee RAG — ask natural-language questions about the team.
 Examples:
-    who reports to Dhruv Sharma?
+    who reports to Vignesh?
     list everyone on MPLS
     who keeps the network reliable?
 Type 'q' (or Ctrl-C / Ctrl-D) to quit.
