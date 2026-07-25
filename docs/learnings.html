@@ -131,10 +131,11 @@
       <a href="#ideas">6 · My fix ideas</a>
       <a href="#p5">7 · The interface</a>
       <a href="#embed">8 · Inside embeddings</a>
+      <a href="#tone">9 · Friendly answers</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after the embeddings deep-dive (section 8) · <b>Status:</b> Phases 0–5 + LLM-router upgrade done; Phase 6 (improvements) / optional Streamlit UI next.</p>
+    <p class="status"><b>Last updated:</b> after the friendly-answers tweak (section 9) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt done; Phase 6 (improvements) / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -406,6 +407,55 @@ magnitude of the vector: 1.0   <span class="c"># MiniLM normalizes to ~1.0</span
       <b>Bonus term</b>
       Extracting human-nameable concepts back out of these tangled vectors is a real research area
       (<em>mechanistic interpretability</em>, sparse autoencoders) — but the raw dimensions themselves stay unlabeled.
+    </div>
+  </section>
+
+  <!-- Section 9 — friendly answers -->
+  <section id="tone">
+    <span class="phase-tag">Phase 4.5 · My idea</span>
+    <h2>9 · Friendlier answers — without breaking the grounding</h2>
+    <p>Playing in <code>main.py --debug</code>, I noticed the answers were correct but <b>curt</b> — the LLM
+      basically re-read the card. I had two productization ideas:</p>
+    <ul class="tight">
+      <li><b>Idea A — nicer tone:</b> greet / thank / offer more help, so it feels like an assistant.</li>
+      <li><b>Idea B — instead of a flat "I don't know", let the LLM answer from its own knowledge.</b></li>
+    </ul>
+
+    <div class="callout idea">
+      <b>The trap I nearly walked into (Idea B)</b>
+      My data has no "Balamurugan". If I let the model fall back to its <em>own</em> knowledge, it would
+      happily explain the name — or worse, <b>invent a fake employee</b> ("Yes, Balamurugan reports to X").
+      That is <b>hallucination</b> — the exact thing RAG's guardrail exists to stop. In a data-lookup tool,
+      a confident <em>wrong</em> answer is far more damaging than an honest "I don't have that."
+    </div>
+
+    <table>
+      <tr><th>Approach</th><th>Verdict</th></tr>
+      <tr><td>Strict flat "I don't know based on the data."</td><td class="ok">Safe — but robotic</td></tr>
+      <tr><td>Free LLM fallback (Idea B, literally)</td><td class="no">❌ Invents fake employees — unacceptable</td></tr>
+      <tr><td><b>Middle ground:</b> stay grounded, but phrase the "no" helpfully</td><td class="ok">✅ What we shipped</td></tr>
+    </table>
+
+    <p><b>The fix was prompt-only</b> (no code logic change): rewrite <code>SYSTEM_PROMPT</code> in
+      <code>generate.py</code> to be warm <em>and</em> keep every anti-hallucination rule. Key surviving line:
+      <code>Do NOT make up an answer from general knowledge.</code></p>
+
+    <p>Same 4 questions, before vs after:</p>
+    <table>
+      <tr><th>Question</th><th>Before (curt)</th><th>After (friendly, still grounded)</th></tr>
+      <tr><td>Is there an employee Pari?</td><td>"Yes, Pari Sharma — managed by…"</td><td>"<b>Yes!</b> … <b>Let me know if you'd like more details!</b>"</td></tr>
+      <tr><td>How many under Aditya?</td><td>"12 people work under…"</td><td>Clean numbered list + "<b>breakdown by project?</b>"</td></tr>
+      <tr><td>what is 1+1?</td><td>"I don't know based on the data."</td><td>"1+1 is basic math… <b>I can only help with facts about the team</b>"</td></tr>
+      <tr><td>who is Balamurugan?</td><td>"I don't know based on the data."</td><td>"<b>Could you double-check the spelling?</b> … or search by manager / project / technology"</td></tr>
+    </table>
+
+    <div class="callout rec">
+      <b>The lesson</b>
+      <b>Tone lives in the prompt; grounding is non-negotiable.</b> You can make a RAG bot as warm as you like
+      by editing the system prompt — but the moment you let it answer from outside the retrieved records,
+      it stops being a <em>retrieval</em> system and starts guessing. Change the <b>wording</b> of the "no",
+      never the <b>rule</b> behind it. (Minor cost: "be warm" slightly invites filler — trim tone first if you
+      ever want crisper answers.)
     </div>
   </section>
 

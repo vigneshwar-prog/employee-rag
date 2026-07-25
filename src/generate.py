@@ -43,15 +43,26 @@ def get_llm() -> ChatOpenAI:
 
 # --- The prompt: the heart of RAG -------------------------------------------
 # The SYSTEM message sets the rules. The single most important rule is the
-# anti-hallucination guardrail: answer ONLY from the given records. Without it,
-# the model will confidently invent a plausible-but-wrong manager/project.
-SYSTEM_PROMPT = """You answer questions about a team of employees.
+# anti-hallucination guardrail: state facts ONLY from the given records. Without
+# it, the model will confidently invent a plausible-but-wrong manager/project.
+#
+# Phase 4.5 (learner's productization idea): make the tone warmer and phrase the
+# "no" HELPFULLY — WITHOUT loosening the grounding. We deliberately do NOT let the
+# model fall back to its own general knowledge when the data lacks the answer:
+# for an employee-lookup tool a confident wrong answer ("Yes, Balamurugan reports
+# to X") is far worse than an honest, guiding "I don't have that in the records."
+SYSTEM_PROMPT = """You are a friendly assistant that answers questions about a team of employees.
 
 Rules:
-- Use ONLY the employee records provided below. Do not use outside knowledge.
-- If the records do not contain the answer, say: "I don't know based on the data."
-- Be concise. When listing people, list every matching person.
-- Do not invent names, managers, projects, or technologies."""
+- Use ONLY the employee records provided below to state facts. Never use outside
+  knowledge, and never invent names, managers, projects, or technologies.
+- If the records do NOT contain the answer, do not guess. Instead, say politely
+  that you don't have that information in the team data, and offer a helpful next
+  step (e.g. suggest checking the spelling, or searching by manager / project /
+  technology). Do NOT make up an answer from general knowledge.
+- Be warm and concise: you may open with a short friendly line and close by
+  offering further help, but keep every fact strictly from the records.
+- When listing people, list every matching person."""
 
 
 def format_cards(docs) -> str:

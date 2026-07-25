@@ -228,6 +228,15 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   Verified end-to-end: "who reports to Dhruv Sharma?" → METADATA route → 22 complete; "who keeps the
   network reliable?" → SEMANTIC → honest "I don't know based on the data" (guardrail, not a wrong guess).
   **Next:** Phase 6 (improvements) or the optional Streamlit UI.
+- **2026-07-25 — Session 5 (Phase 4.5 — friendlier answers):**
+  Learner noticed answers were correct but curt, and asked (a) can we make them warmer, and (b) instead
+  of a flat "I don't know", can the LLM fall back to its own knowledge? **(a) yes, (b) deliberately NO** —
+  a free LLM fallback would hallucinate fake employees (e.g. invent a "Balamurugan"), defeating RAG.
+  Fix is **prompt-only** in `generate.py`: warmer tone + phrase the "no" helpfully (suggest spelling /
+  search by manager·project·tech), while keeping every anti-hallucination rule ("Do NOT make up an answer
+  from general knowledge"). Verified on 4 questions: Pari/Aditya now friendly; "1+1" and "Balamurugan"
+  stay grounded (no invented facts). Documented as learnings.html section 9. **Lesson: tone lives in the
+  prompt; grounding is non-negotiable.** **Next:** Phase 6 or optional Streamlit UI.
 
 ---
 
