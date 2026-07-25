@@ -138,9 +138,10 @@ gives correct answers to "list all" style questions that pure vector search gets
 > fix) are **sub-improvements inserted into an existing phase**, not new phases — they upgraded
 > the retrieval/generation that Phases 3 & 4 built. The whole-number phases below are the roadmap.
 
-### Phase 6 — Streamlit UI ⏳
-- [ ] Browser front-end on top of the SAME `answer()` engine: text box → answer + sources panel.
-- [ ] Reuse `generate.answer()`; open the store once (cache it) so questions are fast.
+### Phase 6 — Streamlit UI ✅
+- [x] Browser front-end (`src/app.py`) on top of the SAME `answer()` engine: text box → answer + sources panel.
+- [x] `@st.cache_resource` opens the store ONCE (survives Streamlit's per-interaction reruns); debug checkbox mirrors `--debug`; honors the citation fix (sources panel only when cited); friendly gate-down error.
+- [x] Run with `streamlit run src/app.py`.
 
 ### Phase 7 — Aggregation route (count / how-many) ⏳
 - [ ] Learner-found bug: "how many employees in total?" fell to semantic → counted the 4
@@ -196,8 +197,8 @@ Copy the file to: `data/employees.xlsx`
 - Phase 4.5 — Friendlier answers (grounding kept): ✅ Done (learner's idea)
 - Phase 4.6 — Relevance fix (don't recite irrelevant records): ✅ Done (learner's finding)
 - Phase 5 — Interface (CLI `main.py`): ✅ Done
-- Phase 6 — Streamlit UI: ⏳ Pending  ← next
-- Phase 7 — Aggregation route (count/how-many): ⏳ Pending (learner-found bug queued)
+- Phase 6 — Streamlit UI: ✅ Done (`src/app.py`)
+- Phase 7 — Aggregation route (count/how-many): ⏳ Pending (learner-found bug queued)  ← next
 - Phase 8 — Experiments & polish: ⏳ Pending
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
@@ -270,6 +271,15 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   router, not the 97 names; gate is local; risk = going cloud); name matching is **difflib character
   similarity, NOT semantic**, with a 0.6 threshold that genuinely fails on heavy typos; and clarified the
   "vicky" case is a **relevance bug, not a breach or prompt injection**. **Next:** Phase 6 or Streamlit UI.
+- **2026-07-25 — Session 7 (Phase 6 — Streamlit UI ✅):**
+  Renumbered the roadmap first (Streamlit=6, aggregation=7, experiments=8) to clear numbering confusion;
+  noted that X.5 items are sub-improvements, not phases. Built `src/app.py`: single Q&A box on the SAME
+  `generate.answer()` engine, so all prior fixes carry over. Key Streamlit concept taught: the script
+  reruns top-to-bottom on every interaction, so the slow store/embedding load is wrapped in
+  `@st.cache_resource` to run ONCE (web equivalent of the CLI's "open store once"). Debug checkbox mirrors
+  `--debug`; sources shown only when cited (honors the citation fix); friendly gate-down error. Verified:
+  launches headless (HTTP 200, no traceback) and the imported engine answers correctly end-to-end.
+  Run: `streamlit run src/app.py`. **Next:** Phase 7 — aggregation route (the count bug).
 
 ---
 

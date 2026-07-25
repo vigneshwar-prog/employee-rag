@@ -17,5 +17,5 @@ sentence-transformers
 pandas
 openpyxl
 
-# Interface (Phase 5)
+# Interface — CLI (Phase 5) + Streamlit web UI (Phase 6)
 streamlit

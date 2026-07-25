@@ -134,10 +134,11 @@
       <a href="#tone">9 · Friendly answers</a>
       <a href="#howroute">10 · How routing works</a>
       <a href="#security">11 · Security &amp; names</a>
+      <a href="#ui">12 · Streamlit UI</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after the count-bug finding + roadmap renumber · <b>Status:</b> Phases 0–5 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: <b>Phase 6 = Streamlit UI</b>, then Phase 7 = aggregation route (count), Phase 8 = experiments/polish.</p>
+    <p class="status"><b>Last updated:</b> after Phase 6 (Streamlit UI built) · <b>Status:</b> Phases 0–6 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 7 = aggregation route (count), Phase 8 = experiments/polish.</p>
   </header>
 
   <!-- 1 -->
@@ -599,6 +600,32 @@ else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (f
       <b>lightweight tool-calling</b> — the exact "LLM decides, Python executes" pattern I already built (§10).
       Full framework-based function-calling can come later for richer operations.
     </div>
+  </section>
+
+  <!-- Section 12 — Streamlit UI -->
+  <section id="ui">
+    <span class="phase-tag">Phase 6 · Built</span>
+    <h2>12 · The Streamlit web UI</h2>
+    <p>The browser front-end (<code>src/app.py</code>) sits on the <b>same</b> <code>answer()</code> engine as the
+      CLI — a text box → answer → sources panel. Because it calls the unchanged engine, <b>every earlier fix
+      (router, grounding, citations, relevance) carries over for free.</b> Run it with
+      <code>streamlit run src/app.py</code>.</p>
+    <div class="callout pin">
+      <b>The one Streamlit concept that matters — reruns</b>
+      Streamlit re-executes the <b>whole script top-to-bottom on every interaction</b> (typing, clicking,
+      ticking a box). Opening the store loads the MiniLM model — slow — so doing it per rerun would crawl.
+      <code>@st.cache_resource</code> runs it <b>once</b> and reuses the object. It's the web equivalent of the
+      CLI's "open the store once".
+    </div>
+    <table>
+      <tr><th></th><th>CLI (<code>main.py</code>)</th><th>Streamlit (<code>app.py</code>)</th></tr>
+      <tr><td>Open store once</td><td>before the loop</td><td><code>@st.cache_resource</code></td></tr>
+      <tr><td>Ask</td><td><code>input()</code> loop</td><td>text box + form submit</td></tr>
+      <tr><td>Debug route</td><td><code>--debug</code> flag</td><td>a checkbox</td></tr>
+      <tr><td>Sources</td><td>printed line (only if cited)</td><td>expander panel (only if cited)</td></tr>
+    </table>
+    <p class="status"><b>✅ Verified:</b> launches headless (HTTP 200, no traceback) and the engine answers
+      correctly end-to-end through app.py's import path.</p>
   </section>
 
   <!-- Glossary -->
