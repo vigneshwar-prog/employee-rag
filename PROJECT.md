@@ -113,11 +113,14 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] Re-runnable `index.py` (stable ids = employee name → upsert, no duplicates)
 - [x] Verified: 97 vectors, semantic search works, store reopens without re-embedding
 
-### Phase 3 — Hybrid Retrieval ⏳  ← core learning
-- [ ] Semantic retriever: embed question, top-k similarity search
-- [ ] Metadata filter: detect known managers/projects/techs in the question →
-      Chroma `where={"manager": "Dhruv Sharma"}` for exact "list all" answers
-- [ ] Debug mode: print retrieved employees before calling the LLM
+### Phase 3 — Hybrid Retrieval ✅  ← core learning
+- [x] Semantic retriever: embed question, top-k similarity search (fallback path)
+- [x] Metadata filter: detect known managers/projects/techs/names in the question →
+      Chroma `where={field: value}` for exact, COMPLETE "list all" answers
+- [x] Intent cues ("reports to"→manager, "on the"→project, "knows"→technology) resolve
+      the name-vs-manager ambiguity (e.g. "reports to Dhruv" = her 22-person team, not her record)
+- [x] Debug mode: prints which route (METADATA vs SEMANTIC) was taken and why
+- [x] Detector built from the DATA's own distinct values (never drifts); "Unassigned" excluded
 
 ### Phase 4 — Generation (Claude @ localhost:8080) ⏳
 - [ ] Wire `ChatOpenAI(base_url="http://localhost:8080/v1", api_key="not-needed")`
@@ -168,7 +171,7 @@ Copy the file to: `data/employees.xlsx`
 - Phase 0 — Setup: ✅ Done
 - Phase 1 — Data: ✅ Done
 - Phase 2 — Embeddings & Indexing: ✅ Done
-- Phase 3 — Retrieval: ⏳ Pending
+- Phase 3 — Retrieval: ✅ Done
 - Phase 4 — Generation: ⏳ Pending
 - Phase 5 — Interface: ⏳ Pending
 - Phase 6 — Improvements: ⏳ Pending
