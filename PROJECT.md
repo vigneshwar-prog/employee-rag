@@ -122,12 +122,13 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] Debug mode: prints which route (METADATA vs SEMANTIC) was taken and why
 - [x] Detector built from the DATA's own distinct values (never drifts); "Unassigned" excluded
 
-### Phase 4 — Generation (Claude @ localhost:8080) ⏳
-- [ ] Wire `ChatOpenAI(base_url="http://localhost:8080/v1", api_key="not-needed")`
-- [ ] Prompt template: system rules ("answer ONLY from context, say if unknown")
-      + retrieved employee cards + question
-- [ ] Return grounded answer **+ list of source employees** (anti-hallucination)
-- [ ] Build the LangChain RAG chain (retriever → prompt → LLM → parser)
+### Phase 4 — Generation (Claude @ localhost:8080) ✅
+- [x] Wire `ChatOpenAI(base_url="http://localhost:8080/v1", api_key="unused", model="claude-sonnet-5")`
+- [x] Prompt template: system rules ("answer ONLY from records, else 'I don't know'") + cards + question
+- [x] Return grounded answer **+ list of source employees** (anti-hallucination)
+- [x] `src/generate.py`: retrieve → augment (stuff cards) → generate → {answer, sources}
+- [x] Verified: manager/project lookups answer in plain English; "reports to Dhruv" lists all 22;
+      salary question correctly returns "I don't know based on the data" (guardrail works)
 
 ### Phase 5 — Interface ⏳
 - [ ] CLI Q&A loop (`main.py`)
@@ -172,7 +173,7 @@ Copy the file to: `data/employees.xlsx`
 - Phase 1 — Data: ✅ Done
 - Phase 2 — Embeddings & Indexing: ✅ Done
 - Phase 3 — Retrieval: ✅ Done
-- Phase 4 — Generation: ⏳ Pending
+- Phase 4 — Generation: ✅ Done
 - Phase 5 — Interface: ⏳ Pending
 - Phase 6 — Improvements: ⏳ Pending
 

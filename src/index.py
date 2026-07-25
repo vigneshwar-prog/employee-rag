@@ -21,6 +21,13 @@ import os
 # importing huggingface libs, so it goes at the very top.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# Belt-and-suspenders: a few HF code paths (e.g. the PEFT adapter probe) ignore the
+# OFFLINE flag and still try the network. If they do, point them at the corporate
+# CA bundle we saved in Phase 0 so TLS verification succeeds instead of crashing.
+_CA = Path(__file__).resolve().parent.parent / "certs" / "keychain-roots.pem"
+if _CA.exists():
+    os.environ.setdefault("SSL_CERT_FILE", str(_CA))
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", str(_CA))
 
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
