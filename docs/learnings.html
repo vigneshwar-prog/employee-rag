@@ -135,10 +135,11 @@
       <a href="#howroute">10 · How routing works</a>
       <a href="#security">11 · Security &amp; names</a>
       <a href="#ui">12 · Streamlit UI</a>
+      <a href="#agg">13 · Counting (aggregation)</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 6 (Streamlit UI built) · <b>Status:</b> Phases 0–6 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 7 = aggregation route (count), Phase 8 = experiments/polish.</p>
+    <p class="status"><b>Last updated:</b> after Phase 7 (aggregation/count route built) · <b>Status:</b> Phases 0–7 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, comparisons).</p>
   </header>
 
   <!-- 1 -->
@@ -582,7 +583,7 @@ else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (f
       Verified: "vicky" → clean "not found"; "vignsh" → still finds Vigneshwar B; "under Aditya" → still lists all 12.
     </div>
 
-    <h3>11.5 — The "count" bug → a THIRD route (Phase 7 idea)</h3>
+    <h3>11.5 — The "count" bug → a THIRD route (✅ built in Phase 7, see §13)</h3>
     <div class="callout pin">
       <b>What happened</b>
       <em>"how many employees in total?"</em> → no known entity → semantic → returned k=4 cards → the LLM
@@ -634,6 +635,45 @@ else:    store.similarity_search(question, k=k)    <span class="c"># SEMANTIC (f
       Silence it with <code>--server.fileWatcherType none</code> if wanted. <b>Decision:</b> Streamlit was the
       learning goal (a UI is one option) and it's achieved — chasing a watcher warning teaches no RAG, so I'm
       investing the time in core logic (Phase 7 aggregation, name matching) instead.
+    </div>
+  </section>
+
+  <!-- Section 13 — aggregation -->
+  <section id="agg">
+    <span class="phase-tag">Phase 7 · Built</span>
+    <h2>13 · Counting — the third route (aggregation)</h2>
+    <p>The count bug from §11.5 is now fixed. I added a <b>third route</b> next to metadata &amp; semantic:</p>
+    <pre>metadata   -> exact filter, LIST the people        (existing)
+semantic   -> fuzzy meaning search                  (existing)
+aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</span></pre>
+    <div class="callout rec">
+      <b>The golden rule of this phase</b>
+      <b>The LLM must NEVER be the thing that counts</b> — being bad at counting was the whole bug.
+      <b>Python owns the number</b> (<code>len(store.get(where=…))</code>); the LLM only phrases it warmly.
+      A count is just "do the metadata filter, then count the results instead of listing them."
+    </div>
+    <table>
+      <tr><th>Question</th><th>Route</th><th>Count by</th><th>Answer</th></tr>
+      <tr><td>how many employees in total?</td><td>aggregate</td><td>field=null → all</td><td class="ok">97 (bug was "4")</td></tr>
+      <tr><td>how many under Aditya?</td><td>aggregate</td><td>manager=Aditya</td><td>12</td></tr>
+      <tr><td>how many on MPLS?</td><td>aggregate</td><td>technology=MPLS</td><td>8</td></tr>
+      <tr><td>who reports to Dhruv?</td><td>metadata</td><td>—</td><td>lists 22 (unchanged)</td></tr>
+    </table>
+    <p><b>How it's wired</b> (same "LLM decides, Python executes" pattern as §10):</p>
+    <ul class="tight">
+      <li>Router prompt gained an <code>"aggregate"</code> option; <code>llm_route()</code> now returns a
+        <b>plan dict</b> (<code>{route, field, value}</code>) instead of a bare tuple, so it can express
+        "count everyone" (field=null) vs "count within a filter".</li>
+      <li><code>retrieve_with_plan()</code> computes <code>count = len(docs)</code> in Python and puts it in the plan.</li>
+      <li><code>_answer_count()</code> hands the LLM the <b>exact number</b> with "use this EXACTLY, do not
+        recompute" — so tone stays friendly but the digit is Python's. Sources stay empty (a count names nobody).</li>
+    </ul>
+    <div class="callout pin">
+      <b>Design choices I made</b>
+      (1) <b>Right behaviour</b> for "how many?" is not "I can't disclose" (not secret) nor "I don't know"
+      (it knows) — it's the real number. (2) Scope kept to <b>single counts</b> (total + filtered);
+      group-by tables ("how many per manager?") are a later extension. (3) <b>Graceful fallback holds</b>:
+      with the LLM router off, aggregate isn't available, so counts safely degrade to semantic — no crash.
     </div>
   </section>
 

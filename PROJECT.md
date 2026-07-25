@@ -143,14 +143,11 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] `@st.cache_resource` opens the store ONCE (survives Streamlit's per-interaction reruns); debug checkbox mirrors `--debug`; honors the citation fix (sources panel only when cited); friendly gate-down error.
 - [x] Run with `streamlit run src/app.py`.
 
-### Phase 7 — Aggregation route (count / how-many) ⏳
-- [ ] Learner-found bug: "how many employees in total?" fell to semantic → counted the 4
-      retrieved cards → answered "4" (real = 97). Semantic/metadata can't count.
-      Fix: add a third route `"aggregate"` to `llm_route`
-      (e.g. `{route:"aggregate", operation:"count", field:"manager"|null}`) + a Python branch
-      that does `store.get(where=...)` and returns the real count. This IS lightweight
-      tool-calling — same "LLM decides, Python executes" pattern already in `llm_route()`.
-      Covers "how many employees", "how many under X", "how many on MPLS".
+### Phase 7 — Aggregation route (count / how-many) ✅
+- [x] Third route `"aggregate"` in `llm_route` (now returns a plan dict). `retrieve_with_plan()` computes
+      `count = len(store.get(where=...))` in PYTHON (LLM never counts); `generate._answer_count()` hands the
+      LLM the exact number to phrase warmly. Covers total + filtered ("how many under X / on MPLS").
+      Verified: total→97 (bug was "4"), Aditya→12, MPLS→8; listing & semantic unchanged; graceful fallback holds.
 - [ ] (Later) Full framework-based tool/function calling for richer ops beyond count.
 
 ### Phase 8 — Experiments & polish (learning extensions) ⏳
@@ -198,7 +195,8 @@ Copy the file to: `data/employees.xlsx`
 - Phase 4.6 — Relevance fix (don't recite irrelevant records): ✅ Done (learner's finding)
 - Phase 5 — Interface (CLI `main.py`): ✅ Done
 - Phase 6 — Streamlit UI: ✅ Done (`src/app.py`)
-- Phase 7 — Aggregation route (count/how-many): ⏳ Pending (learner-found bug queued)  ← next
+- Phase 7 — Aggregation route (count/how-many): ✅ Done (learner-found bug)
+- Phase 8 — Experiments & polish: ⏳ Pending  ← next
 - Phase 8 — Experiments & polish: ⏳ Pending
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
@@ -280,6 +278,15 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   `--debug`; sources shown only when cited (honors the citation fix); friendly gate-down error. Verified:
   launches headless (HTTP 200, no traceback) and the imported engine answers correctly end-to-end.
   Run: `streamlit run src/app.py`. **Next:** Phase 7 — aggregation route (the count bug).
+- **2026-07-25 — Session 8 (Phase 7 — Aggregation route ✅):**
+  Fixed the learner-found count bug ("how many employees?" → said 4, real 97). Added a third route
+  `"aggregate"` alongside metadata/semantic. `llm_route()` now returns a **plan dict** (so it can express
+  count-everyone vs count-within-a-filter); `retrieve_with_plan()` computes `count = len(store.get(where=…))`
+  in **Python** (the LLM never counts — that was the bug); `generate._answer_count()` hands the LLM the exact
+  number to phrase warmly (learner chose "Python counts, LLM phrases"). Scope = single counts (total +
+  filtered); group-by tables deferred to Phase 8. Verified: total→97, Aditya→12, MPLS→8; listing & semantic
+  unchanged; graceful fallback holds (LLM off → counts degrade to semantic, no crash). Docs: learnings §13.
+  **Lesson: Python owns the number, the LLM owns the words.** **Next:** Phase 8 — experiments & polish.
 
 ---
 

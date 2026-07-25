@@ -20,7 +20,7 @@ Run it to ask questions and get real answers:
 
 from langchain_openai import ChatOpenAI
 
-from retrieval import retrieve
+from retrieval import retrieve_with_plan
 
 # --- LLM config: the local Claude gate --------------------------------------
 GATE_BASE = "http://localhost:8080/v1"
@@ -138,12 +138,37 @@ def _cited_sources(answer_text: str, docs) -> list[str]:
     return cited
 
 
+def _answer_count(question: str, plan: dict) -> str:
+    """Phrase a COUNT answer. Python already computed the number (plan['count']);
+    the LLM only wraps it in a friendly sentence — it must NOT recompute it.
+
+    This is the heart of Phase 7: the model is bad at counting (that was the bug),
+    so Python owns the number and we hand it over as a fact to be restated verbatim.
+    """
+    count = plan["count"]
+    field, value = plan.get("field"), plan.get("value")
+    scope = f"{field} = {value}" if field else "the whole team"
+    system = (
+        "You state a precomputed count in one warm, concise sentence.\n"
+        f"The exact count is {count}. Use this number EXACTLY — do not change or recompute it.\n"
+        "Do not list names (you weren't given any). You may offer to list them or break it down."
+    )
+    human = f"Question: {question}\nScope: {scope}\nExact count: {count}"
+    llm = get_llm()
+    return llm.invoke([("system", system), ("human", human)]).content
+
+
 def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
     """Full RAG: retrieve -> augment -> generate. Returns {answer, sources}."""
-    # 1. RETRIEVE (Phase 3 decides metadata-filter vs semantic).
-    docs = retrieve(question, store=store, k=k, debug=debug)
+    # 1. RETRIEVE — now returns a PLAN too, so we know if it's a count.
+    docs, plan = retrieve_with_plan(question, store=store, k=k, debug=debug)
 
-    # 2. AUGMENT + 3. GENERATE.
+    # 1a. AGGREGATE route: Python counted; LLM just phrases the number.
+    #     Sources stay empty — a count names nobody specific.
+    if plan.get("route") == "aggregate":
+        return {"answer": _answer_count(question, plan), "sources": []}
+
+    # 2. AUGMENT + 3. GENERATE (metadata / semantic routes).
     messages = build_messages(question, docs)
     llm = get_llm()
     response = llm.invoke(messages)

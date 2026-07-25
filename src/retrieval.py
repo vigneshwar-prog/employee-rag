@@ -112,10 +112,13 @@ def _router_system_prompt(known: dict[str, list[str]]) -> str:
         f"Known projects: {known['project']}\n"
         f"Known technologies: {known['technology']}\n\n"
         "Decide how to answer the user's question. Reply with ONLY a JSON object:\n"
-        '{"route": "metadata" | "semantic", '
+        '{"route": "metadata" | "semantic" | "aggregate", '
         '"field": "name" | "manager" | "project" | "technology" | null, '
         '"value": "<the exact known value, fixing typos/partials to the closest known value>" | null}\n\n'
-        "Use metadata when the question targets a specific manager/project/technology/person.\n"
+        "Use metadata when the question asks WHO/WHICH people match a specific "
+        "manager/project/technology/person (it lists them).\n"
+        "Use aggregate when the question asks HOW MANY / the COUNT / the TOTAL number of people "
+        "(optionally within a manager/project/technology). Use field=null, value=null for a grand total.\n"
         "Use semantic for fuzzy/meaning questions with no specific known entity.\n"
         "Output only the JSON, nothing else."
     )
@@ -152,10 +155,16 @@ def resolve_value(field: str, value: str, known: dict[str, list[str]]) -> str | 
 
 
 def llm_route(question: str, known: dict[str, list[str]]):
-    """Ask the LLM to route; return (field, value) for metadata, or None for semantic.
+    """Ask the LLM to route; return a PLAN dict, or None for semantic/fallback.
+
+    Plan shapes:
+      {"route": "metadata",  "field": <f>, "value": <real>}   -> list matching people
+      {"route": "aggregate", "field": <f>, "value": <real>}   -> COUNT within that filter
+      {"route": "aggregate", "field": None, "value": None}    -> COUNT everyone (grand total)
 
     Any failure (gate down, bad JSON, unvalidated value) returns None so the caller
-    degrades gracefully to the rule-based detector / semantic search.
+    degrades gracefully to the rule-based detector / semantic search. As always, we
+    NEVER trust the LLM's value blindly — it's resolved against the known lists first.
     """
     try:
         from langchain_openai import ChatOpenAI
@@ -170,19 +179,35 @@ def llm_route(question: str, known: dict[str, list[str]]):
         return None  # gate unreachable -> let caller fall back
 
     decision = _parse_router_json(reply)
-    if not decision or decision.get("route") != "metadata":
+    if not decision:
         return None
+    route = decision.get("route")
+    if route not in ("metadata", "aggregate"):
+        return None  # semantic (or unknown) -> caller falls back
+
     field, raw_value = decision.get("field"), decision.get("value")
+
+    # Grand-total count: "how many employees in total?" — no field to resolve.
+    if route == "aggregate" and not field:
+        return {"route": "aggregate", "field": None, "value": None}
+
+    # Otherwise resolve the value against real stored data (guardrail).
     if field == "name":
-        # names aren't in `known` lists (97 of them); resolve against actual names.
         real = resolve_value("name", raw_value, {"name": known["name"]})
     else:
         real = resolve_value(field, raw_value, known)
-    return (field, real) if real else None
+    if not real:
+        return None  # couldn't tie it to real data -> fall back
+    return {"route": route, "field": field, "value": real}
 
 
-def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
-    """Hybrid retrieve, now with the LLM router as the primary decision-maker.
+def retrieve_with_plan(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
+    """Route the question and return (docs, plan).
+
+    `plan` tells the caller WHAT happened so it can phrase the answer:
+      {"route": "metadata",  "field", "value"}                 -> docs = matching people
+      {"route": "aggregate", "field", "value", "count": int}   -> docs = matched people, count = how many
+      {"route": "semantic"}                                    -> docs = top-k similar
 
     Routing order (each step degrades gracefully to the next):
       1. LLM router  -> understands partials/typos/synonyms, validated to a real value
@@ -194,32 +219,56 @@ def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm:
 
     known = _known_values(store)
 
-    # 1. LLM router (primary). 2. rule-based detector (fallback).
-    hit = None
-    route_reason = ""
+    # 1. LLM router (primary) -> a plan dict. 2. rule-based detector (fallback) -> a tuple
+    #    we normalize into a metadata plan.
+    plan = None
+    reason = ""
     if use_llm:
-        hit = llm_route(question, known)
-        if hit:
-            route_reason = "LLM router"
-    if hit is None:
+        plan = llm_route(question, known)
+        if plan:
+            reason = "LLM router"
+    if plan is None:
         hit = detect_filter(question, known)
         if hit:
-            route_reason = "rule-based"
+            plan = {"route": "metadata", "field": hit[0], "value": hit[1]}
+            reason = "rule-based"
 
-    if hit is not None:
-        field, value = hit
+    # --- AGGREGATE: count, don't list. Python owns the number (LLM is bad at counting). ---
+    if plan and plan["route"] == "aggregate":
+        field, value = plan["field"], plan["value"]
+        if field:  # count within a filter, e.g. manager == Dhruv Sharma
+            results = store.get(where={field: value})
+            docs = _get_result_to_docs(results)
+            where_txt = f"where {field} == {value!r}"
+        else:       # grand total: count everyone
+            results = store.get()
+            docs = _get_result_to_docs(results)
+            where_txt = "ALL employees"
+        plan["count"] = len(docs)
+        if debug:
+            print(f"  [route] AGGREGATE ({reason})  count {where_txt}  -> {plan['count']}")
+        return docs, plan
+
+    # --- METADATA: exact filter, list the people. ---
+    if plan and plan["route"] == "metadata":
+        field, value = plan["field"], plan["value"]
         results = store.get(where={field: value})
         docs = _get_result_to_docs(results)
         if debug:
-            print(f"  [route] METADATA ({route_reason})  where {field} == {value!r}  "
+            print(f"  [route] METADATA ({reason})  where {field} == {value!r}  "
                   f"-> {len(docs)} exact match(es)")
-        return docs
+        return docs, plan
 
-    # 3. SEMANTIC fallback.
+    # --- SEMANTIC fallback. ---
     docs = store.similarity_search(question, k=k)
     if debug:
-        print(f"  [route] SEMANTIC search  (no filterable entity found)  "
-              f"-> top {len(docs)}")
+        print(f"  [route] SEMANTIC search  (no filterable entity found)  -> top {len(docs)}")
+    return docs, {"route": "semantic"}
+
+
+def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
+    """Backwards-compatible wrapper: return just the docs (used by __main__ and older callers)."""
+    docs, _plan = retrieve_with_plan(question, store=store, k=k, debug=debug, use_llm=use_llm)
     return docs
 
 
