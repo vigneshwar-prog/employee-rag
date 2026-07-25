@@ -759,6 +759,29 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       (4) <b>Cost is visible</b>: a compound question = 1 decompose + N route + N phrasing + 1 stitch LLM
       calls; fine for learning, a cheaper variant just joins sub-answers with blank lines.
     </div>
+
+    <h3>14.1 — Answer only what was asked (granularity)</h3>
+    <p>Next playground finding: asking for ONE field returned the WHOLE card.</p>
+    <pre>"who is <b>manager of</b> Vignesh?"
+  before -> "...managed by Rehan, works on MTN, specializes in Automation"  <span class="c"># all 3 fields</span>
+  after  -> "...manager is <b>Rehan Sharma</b>."                                <span class="ok"># just the field asked</span></pre>
+
+    <div class="callout">
+      <b>Why it was NOT a tool-calling problem</b>
+      Retrieval &amp; routing were perfect — the right person was found. The over-answer happened in
+      GENERATION: <code>format_cards()</code> feeds the LLM the full card, and the old prompt never said
+      "answer only the field asked". A tool would hand back the same full card, so tool calling fixes
+      nothing here. <b>Counting</b> was a <i>computation</i> bug (Python fixed it); <b>this</b> is a
+      <i>presentation</i> bug (the prompt fixes it). Same "extra stuff" symptom, opposite cure.
+    </div>
+
+    <div class="callout pin">
+      <b>The fix (prompt-only, no new code)</b>
+      Two <code>SYSTEM_PROMPT</code> rules: (1) <b>match granularity</b> — one-field question → one field;
+      full card only for "who is / tell me about X". (2) <b>trim tails</b> — at most ONE closing offer for
+      the whole reply, not a "let me know!" after every bullet. The legitimate "did you mean…?" on a genuine
+      fuzzy name match is kept (that's the one case a caveat helps).
+    </div>
   </section>
 
   <!-- Glossary -->

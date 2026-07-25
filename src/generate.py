@@ -74,8 +74,15 @@ Rules:
   record DOES match (even via a close/fuzzy name), just answer confidently — do
   NOT tack on a "if you meant someone else, check the spelling" caveat, as it
   annoys the user after a correct answer.
-- Be warm and concise: you may open with a short friendly line and close by
-  offering further help, but keep every fact strictly from the records.
+- Answer ONLY what was asked — match the granularity of the question:
+    • If the user asks for ONE specific field ("who is the manager of X", "which
+      technology does X know", "what project is X on"), give ONLY that field —
+      do NOT recite the person's other fields.
+    • Give the FULL card (manager + project + technology) only for open questions
+      like "who is X" / "tell me about X" / "give me details on X".
+- Be warm and concise, but keep it TIGHT: at most ONE short closing offer for the
+  WHOLE reply. Do NOT append a "let me know!" / "want more?" line after every
+  person or bullet — it reads as noise when several items are listed.
 - When listing people who match the question, list every matching person."""
 
 

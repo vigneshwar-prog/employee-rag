@@ -304,6 +304,17 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   compound→both answered, total→97, Dhruv→22, vignesh→Vigneshwar B (no nag), fallback (use_llm=False)→
   rule-based no crash. Docs: learnings §14. **Lesson: decompose → route each through the same guardrail →
   stitch; reuse beats reinvent.** **Next:** Phase 8 — experiments & polish.
+- **2026-07-25 — Session 9b (Phase 8a follow-up — answer granularity):**
+  Playground finding: asking for ONE field ("who is the manager of Vignesh?", "which technology does
+  Vivek know?") returned the WHOLE card (mgr + project + tech), plus a chatty "let me know!" after every
+  bullet. Diagnosed as a **presentation** bug, not retrieval/tool-calling: `format_cards()` feeds the full
+  card and the prompt never said "answer only the field asked" — a tool would return the same card, so tool
+  calling fixes nothing (contrast the count bug, which WAS computation → Python). Fix = prompt-only: two
+  `SYSTEM_PROMPT` rules — (1) match granularity (one-field question → one field; full card only for
+  "who is/tell me about X"); (2) trim tails to one closing offer for the whole reply. Kept the legitimate
+  "did you mean…?" on a real fuzzy name match. Verified with the exact 4-part question + a "who is X" control.
+  Docs: learnings §14.1. **Lesson: computation bugs → move work to Python; presentation bugs → fix the prompt.**
+  **Next:** Phase 8 — experiments & polish.
 
 ---
 
