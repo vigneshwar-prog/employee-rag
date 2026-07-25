@@ -130,20 +130,29 @@ gives correct answers to "list all" style questions that pure vector search gets
 - [x] Verified: manager/project lookups answer in plain English; "reports to Dhruv" lists all 22;
       salary question correctly returns "I don't know based on the data" (guardrail works)
 
-### Phase 5 — Interface ✅
+### Phase 5 — Interface (CLI) ✅
 - [x] CLI Q&A loop (`main.py`) — single entry point, opens store once,
       `--debug` flag reveals the routing decision, clean quit + gate-down error
-- [ ] (Optional) Streamlit UI with a text box + sources panel
 
-### Phase 6 — Improvements (learning extensions) ⏳
-- [ ] **Aggregation route (count / how-many)** — learner-found bug: "how many employees in
-      total?" fell to semantic → counted the 4 retrieved cards → answered "4" (real = 97).
-      Semantic/metadata can't count. Fix: add a third route `"aggregate"` to `llm_route`
+> Note on numbering: the `X.5` items (Phase 3.5 router, 4.5 friendly answers, 4.6 relevance
+> fix) are **sub-improvements inserted into an existing phase**, not new phases — they upgraded
+> the retrieval/generation that Phases 3 & 4 built. The whole-number phases below are the roadmap.
+
+### Phase 6 — Streamlit UI ⏳
+- [ ] Browser front-end on top of the SAME `answer()` engine: text box → answer + sources panel.
+- [ ] Reuse `generate.answer()`; open the store once (cache it) so questions are fast.
+
+### Phase 7 — Aggregation route (count / how-many) ⏳
+- [ ] Learner-found bug: "how many employees in total?" fell to semantic → counted the 4
+      retrieved cards → answered "4" (real = 97). Semantic/metadata can't count.
+      Fix: add a third route `"aggregate"` to `llm_route`
       (e.g. `{route:"aggregate", operation:"count", field:"manager"|null}`) + a Python branch
       that does `store.get(where=...)` and returns the real count. This IS lightweight
       tool-calling — same "LLM decides, Python executes" pattern already in `llm_route()`.
       Covers "how many employees", "how many under X", "how many on MPLS".
 - [ ] (Later) Full framework-based tool/function calling for richer ops beyond count.
+
+### Phase 8 — Experiments & polish (learning extensions) ⏳
 - [ ] Robust name matching: phonetic (Soundex/Metaphone) so "vicky"/"vignsh" resolve reliably.
 - [ ] Compare pure-semantic vs hybrid on "list everyone on MPLS"
 - [ ] Try different k; try a bigger embedding model
@@ -184,8 +193,12 @@ Copy the file to: `data/employees.xlsx`
 - Phase 3 — Retrieval: ✅ Done
 - Phase 4 — Generation: ✅ Done
 - Phase 3.5 — LLM Router upgrade: ✅ Done (learner's finding + idea)
-- Phase 5 — Interface: ✅ Done (CLI `main.py`; Streamlit still optional)
-- Phase 6 — Improvements: ⏳ Pending
+- Phase 4.5 — Friendlier answers (grounding kept): ✅ Done (learner's idea)
+- Phase 4.6 — Relevance fix (don't recite irrelevant records): ✅ Done (learner's finding)
+- Phase 5 — Interface (CLI `main.py`): ✅ Done
+- Phase 6 — Streamlit UI: ⏳ Pending  ← next
+- Phase 7 — Aggregation route (count/how-many): ⏳ Pending (learner-found bug queued)
+- Phase 8 — Experiments & polish: ⏳ Pending
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
 
