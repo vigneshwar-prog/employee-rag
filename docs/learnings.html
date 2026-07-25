@@ -135,7 +135,7 @@
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after the friendly-answers tweak (section 9) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt done; Phase 6 (improvements) / optional Streamlit UI next.</p>
+    <p class="status"><b>Last updated:</b> after the source-citation fix (section 9.1) · <b>Status:</b> Phases 0–5 + LLM-router + friendlier prompt + honest citations done; Phase 6 / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -457,6 +457,32 @@ magnitude of the vector: 1.0   <span class="c"># MiniLM normalizes to ~1.0</span
       never the <b>rule</b> behind it. (Minor cost: "be warm" slightly invites filler — trim tone first if you
       ever want crisper answers.)
     </div>
+
+    <h3>9.1 — The misleading-sources bug I caught</h3>
+    <p>Testing the non-debug CLI, I asked <em>"Hi what can you do?"</em> and got a great capability answer —
+      but it printed <code>Sources (4): Advait Sharma, Kiara Sharma, …</code>. Those 4 people had
+      <b>nothing to do with the answer</b>.</p>
+    <div class="callout pin">
+      <b>Root cause — "sources" was a lie</b>
+      Semantic search <b>always</b> returns <code>k=4</code> nearest cards, even for chitchat or an
+      "I don't know". The code cited <em>whatever retrieval fetched</em>, not <em>what the answer actually
+      used</em>. For metadata routes those are the same; for semantic they diverge and the citation becomes noise.
+    </div>
+    <p><b>Fix (two filters, no extra LLM call), in <code>generate.py</code> <code>_cited_sources()</code>:</b></p>
+    <ul class="tight">
+      <li><b>Refusal guard</b> — if the answer is a grounded "I don't have that" (or nothing was retrieved), cite <b>nothing</b>.</li>
+      <li><b>Mention filter</b> — otherwise keep only retrieved people whose name appears in the answer (full name <em>or</em> first token, so "Pari" still credits "Pari Sharma").</li>
+    </ul>
+    <table>
+      <tr><th>Question</th><th>Route</th><th>Sources now</th></tr>
+      <tr><td>Hi what can you do?</td><td>semantic</td><td class="ok">none (was 4 unrelated names)</td></tr>
+      <tr><td>Is there Pari?</td><td>metadata</td><td>Pari Sharma</td></tr>
+      <tr><td>How many under Aditya?</td><td>metadata</td><td>all 12</td></tr>
+      <tr><td>who is Balamurugan?</td><td>semantic</td><td class="ok">none (refusal)</td></tr>
+    </table>
+    <p><b>Lesson:</b> a citation must mean "the answer was built from this", not "retrieval happened to fetch this".
+      <span class="warn">Caveat:</span> refusal detection is phrase-based (cheap heuristic) — reword the prompt
+      heavily and you may need to add new cue phrases.</p>
   </section>
 
   <!-- Glossary -->

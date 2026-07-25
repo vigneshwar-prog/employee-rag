@@ -57,7 +57,12 @@ def ask_loop(store, debug: bool) -> None:
 
         print(f"\n  Answer: {result['answer']}")
         srcs = result["sources"]
-        print(f"  Sources ({len(srcs)}): {', '.join(srcs) if srcs else '(none)'}\n")
+        # Only cite sources when the answer was actually built from records.
+        # (Chitchat / "I don't know" answers cite nothing — no misleading names.)
+        if srcs:
+            print(f"  Sources ({len(srcs)}): {', '.join(srcs)}\n")
+        else:
+            print()
 
 
 def main() -> None:

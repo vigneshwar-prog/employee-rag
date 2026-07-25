@@ -97,6 +97,37 @@ def build_messages(question: str, docs) -> list:
     ]
 
 
+def _cited_sources(answer_text: str, docs) -> list[str]:
+    """Return only the retrieved people the answer ACTUALLY used — not everything
+    retrieval happened to fetch.
+
+    Two filters (learner's finding: semantic always fetches k cards, so chitchat /
+    "I don't know" answers were citing 4 unrelated names — misleading):
+      1. Refusal guard — if the answer didn't use the records (a grounded "I don't
+         have that", or nothing was retrieved), cite nothing.
+      2. Mention filter — keep a person only if their name appears in the answer.
+         We match the full name OR the first token, so "Pari Sharma" is still
+         credited when the answer says just "Pari".
+    """
+    if not docs:
+        return []
+    low = answer_text.lower()
+    # 1. Grounded-refusal / no-data phrasing -> the answer isn't based on any record.
+    refusal_cues = ("i don't have", "i do not have", "don't know", "do not know",
+                    "not something i", "can only help", "double-check the spelling",
+                    "no one named", "don't see anyone", "do not see anyone")
+    if any(cue in low for cue in refusal_cues):
+        return []
+    # 2. Keep only people the answer names (full name or first name).
+    cited = []
+    for d in docs:
+        name = d.metadata["name"]
+        first = name.split()[0].lower()
+        if name.lower() in low or first in low:
+            cited.append(name)
+    return cited
+
+
 def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
     """Full RAG: retrieve -> augment -> generate. Returns {answer, sources}."""
     # 1. RETRIEVE (Phase 3 decides metadata-filter vs semantic).
@@ -107,8 +138,8 @@ def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
     llm = get_llm()
     response = llm.invoke(messages)
 
-    # sources = the exact records the answer is allowed to be based on.
-    sources = [d.metadata["name"] for d in docs]
+    # sources = only the records the answer was ACTUALLY built from (see helper).
+    sources = _cited_sources(response.content, docs)
     return {"answer": response.content, "sources": sources}
 
 
