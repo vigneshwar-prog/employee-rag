@@ -13,6 +13,14 @@ phases just OPEN that directory and query it instantly.
 """
 
 from pathlib import Path
+import os
+
+# The embedding model is cached locally (Phase 0). Force HuggingFace OFFLINE so it
+# never phones home to check for updates — that network call fails behind the
+# corporate SSL-inspecting proxy ("Cannot send a request..."). Must be set BEFORE
+# importing huggingface libs, so it goes at the very top.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
