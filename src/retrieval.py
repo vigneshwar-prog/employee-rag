@@ -188,8 +188,18 @@ def llm_route(question: str, known: dict[str, list[str]]):
     field, raw_value = decision.get("field"), decision.get("value")
 
     # Grand-total count: "how many employees in total?" — no field to resolve.
+    # HARDENING (Phase 8a): the old code took this branch for ANY field=null aggregate.
+    # But the LLM also emits field=null when it CAN'T tie a bogus entity to a field
+    # ("people under Vihaan" — Vihaan isn't a manager). That silently became "count
+    # everyone", skipping resolve_value() entirely and letting the model fabricate a
+    # count. Now we only allow the grand-total branch when the question actually reads
+    # like a total; otherwise we fall back (None) so the guardrail path stays in force.
     if route == "aggregate" and not field:
-        return {"route": "aggregate", "field": None, "value": None}
+        if any(cue in question.lower() for cue in ("total", "all ", " all", "everyone",
+                                                    "how many employees", "how many people",
+                                                    "entire team", "whole team")):
+            return {"route": "aggregate", "field": None, "value": None}
+        return None  # bogus/underspecified entity -> fall back, do NOT count everyone
 
     # Otherwise resolve the value against real stored data (guardrail).
     if field == "name":
@@ -233,6 +243,15 @@ def retrieve_with_plan(question: str, store=None, k: int = 4, debug: bool = True
             plan = {"route": "metadata", "field": hit[0], "value": hit[1]}
             reason = "rule-based"
 
+    return _execute_plan(plan, question, store, k, debug, reason)
+
+
+def _execute_plan(plan, question: str, store, k: int, debug: bool, reason: str = ""):
+    """Run ONE resolved plan -> (docs, plan). This is the aggregate/metadata/semantic
+    tail that used to be inlined in retrieve_with_plan, lifted out verbatim so it can
+    be reused per sub-plan by retrieve_multi(). `plan` may be None -> semantic fallback.
+    Semantic search uses the sub-plan's own text (plan['question']) when present.
+    """
     # --- AGGREGATE: count, don't list. Python owns the number (LLM is bad at counting). ---
     if plan and plan["route"] == "aggregate":
         field, value = plan["field"], plan["value"]
@@ -259,11 +278,126 @@ def retrieve_with_plan(question: str, store=None, k: int = 4, debug: bool = True
                   f"-> {len(docs)} exact match(es)")
         return docs, plan
 
-    # --- SEMANTIC fallback. ---
-    docs = store.similarity_search(question, k=k)
+    # --- SEMANTIC fallback. --- (use the sub-plan's own text when decomposed)
+    q = (plan or {}).get("question", question)
+    docs = store.similarity_search(q, k=k)
     if debug:
         print(f"  [route] SEMANTIC search  (no filterable entity found)  -> top {len(docs)}")
-    return docs, {"route": "semantic"}
+    return docs, {"route": "semantic", "question": q}
+
+
+# ============================================================================
+# QUERY DECOMPOSITION (Phase 8a — the playground finding)
+# ----------------------------------------------------------------------------
+# A compound question ("count people under Aditya AND who is Vivek Sharma?") has
+# TWO intents, but llm_route() returns ONE plan — so one half was always dropped.
+# Fix: split the question into standalone sub-questions, route EACH through the
+# SAME llm_route()/resolve_value() guardrail, then stitch the sub-answers.
+#
+# Bonus: this also kills the fabricated-count bug. A bogus "under Vihaan" becomes
+# its own sub-question; llm_route proposes {aggregate, manager, "Vihaan"};
+# resolve_value fails to snap it to a real manager -> None -> per-sub fallback to
+# detect_filter -> semantic. It can NEVER reach the grand-total escape hatch.
+#
+# COST NOTE (teaching): a compound question now costs 1 decompose + N route +
+# N phrasing + 1 stitch LLM calls. Fine for a learning codebase; a cheaper variant
+# would skip the stitch and just join sub-answers with blank lines.
+# ============================================================================
+
+def _decompose_system_prompt() -> str:
+    return (
+        "You split a user's question into independent sub-questions for an "
+        "employee database.\n"
+        "If the question asks for SEVERAL independent things, return a JSON list of "
+        "self-contained sub-questions. If it asks ONE thing, return a 1-element list.\n"
+        "Each sub-question MUST stand alone: resolve shared verbs and pronouns so it "
+        "reads on its own (e.g. 'count people under Aditya and who is Vivek' -> "
+        '["how many people work under Aditya?", "who is Vivek?"]).\n'
+        "Reply with ONLY a JSON list of strings, nothing else."
+    )
+
+
+def llm_decompose(question: str, known: dict[str, list[str]]) -> list[str] | None:
+    """Split a compound question into standalone sub-questions.
+
+    Returns ["<sub-q>", ...] (length 1 for a simple question), or None on any
+    failure (gate down / bad JSON) so the caller falls back to the single path.
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            base_url="http://localhost:8080/v1", api_key="unused",
+            model="claude-sonnet-5", temperature=0,
+        )
+        reply = llm.invoke(
+            [("system", _decompose_system_prompt()), ("human", question)]
+        ).content
+    except Exception:
+        return None  # gate unreachable -> caller uses single path
+
+    start, end = reply.find("["), reply.rfind("]")
+    if start == -1 or end == -1:
+        return None
+    try:
+        subs = json.loads(reply[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    subs = [s.strip() for s in subs if isinstance(s, str) and s.strip()]
+    return subs or None
+
+
+def llm_route_many(question: str, known: dict[str, list[str]]) -> list[dict] | None:
+    """Decompose, then route EACH sub-question with the existing llm_route().
+
+    Returns a list of sub-plans (each tagged with plan['question'] = its own text),
+    or None to signal "not compound" -> caller uses the unchanged single-plan path.
+    Per-sub fallback mirrors the single path: llm_route -> detect_filter -> semantic.
+    """
+    subs = llm_decompose(question, known)
+    if not subs or len(subs) == 1:
+        return None  # simple question -> let the caller run the normal single path
+
+    plans = []
+    for sub in subs:
+        plan = llm_route(sub, known)             # reuse the guardrail, per sub
+        if plan is None:
+            hit = detect_filter(sub, known)      # rule-based fallback, per sub
+            if hit:
+                plan = {"route": "metadata", "field": hit[0], "value": hit[1]}
+            else:
+                plan = {"route": "semantic"}     # fuzzy fallback, per sub
+        plan["question"] = sub                   # each sub carries its own text
+        plans.append(plan)
+    return plans
+
+
+def retrieve_multi(question: str, store=None, k: int = 4, debug: bool = True,
+                   use_llm: bool = True) -> list[dict]:
+    """Return a list of {"plan", "docs"} sub-results.
+
+    - Simple / non-compound question -> a 1-element list wrapping the EXISTING
+      retrieve_with_plan() result, so single-question behavior is unchanged.
+    - Compound question -> one sub-result per sub-plan, each executed independently
+      through the same _execute_plan() as the single path.
+    """
+    if store is None:
+        store = get_store()
+
+    plans = llm_route_many(question, _known_values(store)) if use_llm else None
+
+    if not plans:  # not compound (or gate down) -> unchanged single path
+        docs, plan = retrieve_with_plan(question, store=store, k=k, debug=debug,
+                                        use_llm=use_llm)
+        return [{"plan": plan, "docs": docs}]
+
+    if debug:
+        print(f"  [decompose] {len(plans)} sub-questions")
+    results = []
+    for p in plans:
+        docs, plan = _execute_plan(p, p["question"], store, k, debug, reason="sub")
+        results.append({"plan": plan, "docs": docs})
+    return results
+
 
 
 def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):

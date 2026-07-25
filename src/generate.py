@@ -20,7 +20,7 @@ Run it to ask questions and get real answers:
 
 from langchain_openai import ChatOpenAI
 
-from retrieval import retrieve_with_plan
+from retrieval import retrieve_multi
 
 # --- LLM config: the local Claude gate --------------------------------------
 GATE_BASE = "http://localhost:8080/v1"
@@ -68,8 +68,12 @@ Rules:
   are the only employees that exist.
 - If the records do NOT contain the answer, do not guess. Instead, say politely
   that you don't have that information in the team data, and offer a helpful next
-  step (e.g. suggest checking the spelling, or searching by manager / project /
-  technology). Do NOT make up an answer from general knowledge.
+  step (e.g. suggest searching by manager / project / technology). Do NOT make up
+  an answer from general knowledge.
+- Only suggest re-checking the spelling when you found NO matching record. If a
+  record DOES match (even via a close/fuzzy name), just answer confidently — do
+  NOT tack on a "if you meant someone else, check the spelling" caveat, as it
+  annoys the user after a correct answer.
 - Be warm and concise: you may open with a short friendly line and close by
   offering further help, but keep every fact strictly from the records.
 - When listing people who match the question, list every matching person."""
@@ -158,24 +162,66 @@ def _answer_count(question: str, plan: dict) -> str:
     return llm.invoke([("system", system), ("human", human)]).content
 
 
-def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
-    """Full RAG: retrieve -> augment -> generate. Returns {answer, sources}."""
-    # 1. RETRIEVE — now returns a PLAN too, so we know if it's a count.
-    docs, plan = retrieve_with_plan(question, store=store, k=k, debug=debug)
-
-    # 1a. AGGREGATE route: Python counted; LLM just phrases the number.
-    #     Sources stay empty — a count names nobody specific.
+def _answer_one(sub: dict, store) -> tuple[str, list[str]]:
+    """Produce (answer_text, sources) for ONE sub-result, reusing the exact
+    single-question logic: aggregate -> _answer_count; metadata/semantic ->
+    build_messages + llm.invoke + _cited_sources.
+    """
+    plan, docs = sub["plan"], sub["docs"]
+    question = plan.get("question", "")
     if plan.get("route") == "aggregate":
-        return {"answer": _answer_count(question, plan), "sources": []}
-
-    # 2. AUGMENT + 3. GENERATE (metadata / semantic routes).
+        return _answer_count(question, plan), []
     messages = build_messages(question, docs)
-    llm = get_llm()
-    response = llm.invoke(messages)
+    response = get_llm().invoke(messages)
+    return response.content, _cited_sources(response.content, docs)
 
-    # sources = only the records the answer was ACTUALLY built from (see helper).
-    sources = _cited_sources(response.content, docs)
-    return {"answer": response.content, "sources": sources}
+
+def _stitch(question: str, parts: list[tuple[str, str]]) -> str:
+    """Combine already-correct sub-answers into one warm, cohesive reply.
+
+    The sub-answers are the ONLY source material — the model must not add facts,
+    recompute any count, or drop a part. (Cheaper alternative: "\\n\\n".join the
+    sub-answers; the LLM stitch just reads warmer for a compound question.)
+    """
+    system = (
+        "You combine several already-correct answers into ONE cohesive, friendly "
+        "reply to the user's original question.\n"
+        "Use ONLY the provided answers. Do NOT add new facts, do NOT recompute or "
+        "change any number, and do NOT drop any part. Keep it warm and concise."
+    )
+    joined = "\n\n".join(f"Q: {q}\nA: {a}" for q, a in parts)
+    human = f"Original question: {question}\n\nAnswers to combine:\n{joined}"
+    return get_llm().invoke([("system", system), ("human", human)]).content
+
+
+def answer(question: str, store=None, k: int = 4, debug: bool = True) -> dict:
+    """Full RAG: retrieve -> augment -> generate. Returns {answer, sources}.
+
+    Handles COMPOUND questions (Phase 8a): retrieve_multi returns one sub-result
+    per intent. A simple question yields exactly one -> behavior unchanged.
+    """
+    subs = retrieve_multi(question, store=store, k=k, debug=debug)
+
+    # --- Single-question path: identical behavior to before Phase 8a. ---
+    if len(subs) == 1:
+        plan, docs = subs[0]["plan"], subs[0]["docs"]
+        # AGGREGATE route: Python counted; LLM just phrases the number.
+        if plan.get("route") == "aggregate":
+            return {"answer": _answer_count(question, plan), "sources": []}
+        # AUGMENT + GENERATE (metadata / semantic routes).
+        messages = build_messages(question, docs)
+        response = get_llm().invoke(messages)
+        sources = _cited_sources(response.content, docs)
+        return {"answer": response.content, "sources": sources}
+
+    # --- Compound path: answer each sub independently, then stitch. ---
+    parts, sources = [], []
+    for sub in subs:
+        text, src = _answer_one(sub, store)
+        parts.append((sub["plan"].get("question", question), text))
+        sources += src
+    final = _stitch(question, parts)
+    return {"answer": final, "sources": sorted(set(sources))}
 
 
 if __name__ == "__main__":

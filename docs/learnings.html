@@ -136,10 +136,11 @@
       <a href="#security">11 · Security &amp; names</a>
       <a href="#ui">12 · Streamlit UI</a>
       <a href="#agg">13 · Counting (aggregation)</a>
+      <a href="#decomp">14 · Query decomposition</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 7 (aggregation/count route built) · <b>Status:</b> Phases 0–7 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, comparisons).</p>
+    <p class="status"><b>Last updated:</b> after Phase 8a (query decomposition for multi-entity questions) · <b>Status:</b> Phases 0–7 + 8a done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, comparisons).</p>
   </header>
 
   <!-- 1 -->
@@ -707,6 +708,56 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       (it knows) — it's the real number. (2) Scope kept to <b>single counts</b> (total + filtered);
       group-by tables ("how many per manager?") are a later extension. (3) <b>Graceful fallback holds</b>:
       with the LLM router off, aggregate isn't available, so counts safely degrade to semantic — no crash.
+    </div>
+  </section>
+
+  <!-- 14 · Query decomposition -->
+  <section id="decomp">
+    <h2>14 · Query decomposition (multi-entity questions)</h2>
+    <p>Playground finding: a <b>compound</b> question got half-answered.</p>
+    <pre><span class="c"># asked ONE line with TWO intents:</span>
+"list no of people under Aditya AND tell me who is Vivek Sharma?"
+  -> only Vivek was answered; the count was silently dropped.</pre>
+
+    <div class="callout">
+      <b>Root cause</b>
+      <code>llm_route()</code> returns exactly <b>one</b> plan <code>{route, field, value}</code>. So the
+      architecture could physically answer only <b>one intent per turn</b> — the second half had nowhere to go.
+    </div>
+
+    <p><b>The fix — <em>query decomposition</em></b> (a real RAG technique): split the question into
+      standalone sub-questions, route <b>each</b> through the SAME machinery, then stitch the answers.</p>
+
+    <pre>question
+  -> llm_decompose()   <span class="c"># ["how many under Aditya?", "who is Vivek?"]</span>
+       │
+       ├─ sub 1 -> llm_route() -> resolve_value() -> AGGREGATE -> count 12
+       └─ sub 2 -> llm_route() -> resolve_value() -> METADATA  -> Vivek's card
+       │
+  -> _stitch()   <span class="ok"># one warm reply containing BOTH answers</span></pre>
+
+    <p><b>Why reuse, not rebuild:</b> each sub-question flows through the existing
+      <code>llm_route()</code> / <code>resolve_value()</code> guardrail. A simple (non-compound) question
+      decomposes to a 1-element list, so <code>retrieve_multi()</code> takes the unchanged single path —
+      old behaviour is <b>byte-for-byte identical</b>.</p>
+
+    <div class="callout rec">
+      <b>It also fixes consistency for partial names</b>
+      "under Vihaan" is now its own sub-question, always routed through <code>resolve_value()</code>, which
+      fuzzy-snaps "Vihaan" → the real manager <b>"Vihaan Sharma"</b> (→ 14). Before, the same query sometimes
+      resolved and sometimes fell to semantic ("no records") — a flaky <b>false-negative</b>. Routing every
+      sub through one guardrail makes resolution deterministic. <span class="c">(Note: 14 was always the
+      correct number — the earlier "no records" was the bug, not the count.)</span>
+    </div>
+
+    <div class="callout pin">
+      <b>Design choices I made</b>
+      (1) <b>Reuse over reinvent</b>: <code>llm_route_many</code> loops the existing router; no parallel
+      resolver. (2) <b>Graceful all the way down</b>: gate off → <code>llm_decompose</code> returns
+      <code>None</code> → single path → rule-based → semantic, exactly as before. (3) <b>Tone tweak</b>:
+      only suggest "check the spelling" when NO record matched — a correct fuzzy match no longer nags.
+      (4) <b>Cost is visible</b>: a compound question = 1 decompose + N route + N phrasing + 1 stitch LLM
+      calls; fine for learning, a cheaper variant just joins sub-answers with blank lines.
     </div>
   </section>
 

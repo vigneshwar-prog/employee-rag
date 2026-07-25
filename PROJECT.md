@@ -196,8 +196,8 @@ Copy the file to: `data/employees.xlsx`
 - Phase 5 — Interface (CLI `main.py`): ✅ Done
 - Phase 6 — Streamlit UI: ✅ Done (`src/app.py`)
 - Phase 7 — Aggregation route (count/how-many): ✅ Done (learner-found bug)
+- Phase 8a — Query decomposition (multi-entity questions): ✅ Done (learner-found bug)
 - Phase 8 — Experiments & polish: ⏳ Pending  ← next
-- Phase 8 — Experiments & polish: ⏳ Pending
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
 
@@ -288,6 +288,22 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   unchanged; graceful fallback holds (LLM off → counts degrade to semantic, no crash). Docs: learnings §13
 (+ §13.1 "follow one question through the code" — 4-step trace + the "aggregate = a `len()`'d metadata filter" insight).
   **Lesson: Python owns the number, the LLM owns the words.** **Next:** Phase 8 — experiments & polish.
+- **2026-07-25 — Session 9 (Phase 8a — Query decomposition ✅):**
+  Playground testing surfaced that COMPOUND questions ("count people under Aditya AND who is Vivek Sharma?")
+  only got half-answered — `llm_route()` returns ONE plan, so one intent was always dropped. Fixed with
+  query decomposition: `llm_decompose()` splits into standalone sub-questions, `llm_route_many()` routes
+  EACH through the **existing** `llm_route()`/`resolve_value()` guardrail (reuse, not reinvent), the
+  aggregate/metadata/semantic tail of `retrieve_with_plan()` was lifted into `_execute_plan()` and called
+  per sub-plan by new `retrieve_multi()`, and `generate._stitch()` combines the already-correct sub-answers
+  into one warm reply (no new facts, no recount). A simple question decomposes to length-1 → unchanged
+  single path (byte-for-byte). Also: (a) hardened the grand-total escape hatch in `llm_route` (only count
+  everyone when the question reads like a total); (b) tone tweak in `SYSTEM_PROMPT` — only suggest
+  "check the spelling" when NO record matched, so a correct fuzzy match no longer nags. Clarified the
+  "Vihaan fabrication": "Vihaan Sharma" is a REAL manager (14 reports) — the earlier "no records" was a
+  flaky false-negative, not a hallucinated count; decomposition makes resolution deterministic. Verified:
+  compound→both answered, total→97, Dhruv→22, vignesh→Vigneshwar B (no nag), fallback (use_llm=False)→
+  rule-based no crash. Docs: learnings §14. **Lesson: decompose → route each through the same guardrail →
+  stitch; reuse beats reinvent.** **Next:** Phase 8 — experiments & polish.
 
 ---
 
