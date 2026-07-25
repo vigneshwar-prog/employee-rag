@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee RAG — My Learnings from the Playground</title>
+  <style>
+    :root {
+      --bg: #f6f6f2;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --border: #d1d5db;
+      --good: #15803d;
+      --bad: #b91c1c;
+      --warn: #b45309;
+      --code-bg: #0f172a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 0% 0%, #e6fffa 0%, transparent 35%),
+        radial-gradient(circle at 100% 100%, #ecfeff 0%, transparent 35%),
+        var(--bg);
+      line-height: 1.6;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+    header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    header h1 { margin: 0 0 6px; font-size: 30px; color: var(--accent); }
+    header p { margin: 4px 0; color: var(--muted); }
+    .nav {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin: 18px 0 0;
+    }
+    .nav a, .nav .extlink {
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      background: #fff;
+      transition: background .15s;
+    }
+    .nav a:hover, .nav .extlink:hover { background: var(--accent-soft); }
+    .nav .extlink { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: bold; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 32px;
+      margin-bottom: 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    h2 {
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 8px;
+      margin-top: 4px;
+      font-size: 23px;
+    }
+    h3 { font-size: 18px; margin-bottom: 6px; }
+    .phase-tag {
+      display: inline-block; font-size: 12px; font-weight: bold;
+      letter-spacing: .5px; text-transform: uppercase;
+      color: var(--accent); background: var(--accent-soft);
+      padding: 2px 10px; border-radius: 6px; margin-bottom: 10px;
+    }
+    code {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      background: #eef2f1; color: #0b3b37;
+      padding: 1px 6px; border-radius: 4px; font-size: 0.9em;
+    }
+    pre {
+      background: var(--code-bg); color: #e2e8f0;
+      padding: 16px; border-radius: 10px; overflow-x: auto;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px; line-height: 1.5;
+    }
+    pre .c { color: #94a3b8; }      /* comment/muted */
+    pre .ok { color: #4ade80; }     /* good */
+    pre .no { color: #f87171; }     /* bad */
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 15px; }
+    th, td { text-align: left; padding: 8px 10px; border: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--accent-soft); color: #0b3b37; }
+    .ok  { color: var(--good); font-weight: bold; }
+    .no  { color: var(--bad);  font-weight: bold; }
+    .warn{ color: var(--warn); font-weight: bold; }
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #f0fdfa; padding: 12px 16px; border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+    }
+    .callout.idea  { border-left-color: #7c3aed; background: #faf5ff; }
+    .callout.rec   { border-left-color: var(--good); background: #f0fdf4; }
+    .callout.pin   { border-left-color: var(--warn); background: #fffbeb; }
+    .callout b { display:block; margin-bottom: 4px; }
+    .qa { margin: 10px 0; }
+    .qa .q { font-weight: bold; }
+    .qa .a { color: var(--muted); margin-left: 14px; }
+    ul.tight { margin: 6px 0; } ul.tight li { margin: 3px 0; }
+    .status { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>My Learnings — Employee RAG Playground</h1>
+    <p>A running log of what I tried, what broke, why it broke, my own ideas to fix it, and the verdicts. Written to revise from later.</p>
+    <p><em>Living document — updated at the end of each phase.</em></p>
+    <div class="nav">
+      <a href="#p1">1 · Semantic basics</a>
+      <a href="#p2">2 · Full doc &amp; scores</a>
+      <a href="#p3">3 · Hybrid routing</a>
+      <a href="#p4">4 · Generation</a>
+      <a href="#flaw">5 · The product flaw</a>
+      <a href="#ideas">6 · My fix ideas</a>
+      <a href="#glossary">Glossary</a>
+      <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
+    </div>
+    <p class="status"><b>Last updated:</b> after Phase 4 &amp; the LLM-router experiment · <b>Status:</b> Phases 0–4 done; routing upgrade = open decision.</p>
+  </header>
+
+  <!-- 1 -->
+  <section id="p1">
+    <span class="phase-tag">Phase 2 · Playground</span>
+    <h2>1 · Pure semantic search — what it can and can't do</h2>
+    <p>I ran <code>index.py</code> and asked questions directly against the vector store.</p>
+    <table>
+      <tr><th>My question</th><th>Result</th><th>Verdict</th></tr>
+      <tr><td>"who does automation?"</td><td>3 Automation people</td><td class="ok">✓ correct</td></tr>
+      <tr><td>"who is vignesh's manager?"</td><td>Vigneshwar + 2 random people, no actual answer</td><td class="no">✗ wrong</td></tr>
+    </table>
+    <h3>Why the split — what <code>similarity_search</code> actually does</h3>
+    <ol class="tight">
+      <li>My whole question becomes <b>one vector</b> (a point in 384-dim space).</li>
+      <li>Chroma returns the <b>k cards whose vectors are closest</b> to that point.</li>
+      <li>That's it — no reasoning, no lookup. It matches the <b>topic</b>, not the <b>intent</b>.</li>
+    </ol>
+    <div class="callout">
+      <b>My one-line takeaway</b>
+      Semantic search retrieves cards that are <em>on the same topic</em> as my question. It does <em>not</em> answer the question. "manager of vignesh?" returns Vigneshwar's own card (it's most "about" vignesh+manager) — the right data, but not the answer.
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="p2">
+    <span class="phase-tag">Phase 2 · Playground</span>
+    <h2>2 · Two confusions I cleared up</h2>
+
+    <h3>Confusion A — "why does it only print name + automation?"</h3>
+    <p>It <b>wasn't</b> the retriever — it was the <code>print()</code> only showing 2 of 4 fields. The full Document always came back:</p>
+    <pre>page_content: Vigneshwar B is managed by Rehan Sharma, works on the MTN project, specializing in Automation.
+metadata:     {name, manager: Rehan Sharma, project: MTN, technology: Automation}</pre>
+    <p>Fix: print all 4 fields + the full card + scores.</p>
+
+    <h3>Confusion B — "then why won't it SAY Rehan?"</h3>
+    <p>Because <b>nothing reads the card</b> yet. Retrieval fetches paper; it doesn't read it aloud. That reader is the LLM = Phase 4.</p>
+    <div class="callout">
+      <b>Mental model I locked in</b>
+      <b>Retriever</b> = librarian who fetches the right file but can't read it. <b>Generator (LLM)</b> = the person who reads it and answers. Two different jobs.
+    </div>
+
+    <h3>The scores — distance vs relevance</h3>
+    <table>
+      <tr><th>Column</th><th>Meaning</th><th>Direction</th></tr>
+      <tr><td><code>distance</code></td><td>raw L2 distance, question ↔ card vector (what Chroma ranks by)</td><td>lower = closer = better</td></tr>
+      <tr><td><code>relevance</code></td><td>normalized 0..1 score</td><td>higher = better</td></tr>
+    </table>
+    <div class="callout pin">
+      <b>Trap I must remember</b>
+      A <b>high score ≠ a right answer</b>. "vignesh's manager" gave Vigneshwar's card a confident 0.355 — confidently the wrong thing. The score measures text similarity, not correctness. Read the <em>gaps</em> and <em>ordering</em>, not the absolute number.
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="p3">
+    <span class="phase-tag">Phase 3 · Playground</span>
+    <h2>3 · Hybrid routing — and how it really decides</h2>
+    <p>Phase 3 added <b>metadata filtering</b> (exact <code>where</code> lookups) alongside semantic. The router picks one:</p>
+    <pre>question → detect a KNOWN value in the text?
+   ├─ yes → METADATA filter where {field: value}   <span class="ok">(exact, COMPLETE "list all")</span>
+   └─ no  → SEMANTIC search top-k                   <span class="c">(fuzzy fallback)</span></pre>
+    <div class="callout pin">
+      <b>The key correction to my first understanding</b>
+      I thought it "tries metadata, then falls back." True — <em>but</em> "found something" means <b>an exact stored value appears verbatim in my question</b>. It's a literal substring matcher, NOT an understander.
+    </div>
+    <p>Proof from my own run — one word flips the route:</p>
+    <table>
+      <tr><th>Question</th><th>Route</th><th>Why</th></tr>
+      <tr><td>"reports under <b>Dhruv</b>"</td><td class="no">SEMANTIC</td><td>"Dhruv" ≠ stored "Dhruv Sharma"</td></tr>
+      <tr><td>"reports under <b>Dhruv Sharma</b>"</td><td class="ok">METADATA (22)</td><td>full value present</td></tr>
+    </table>
+    <p>Also learned: an <b>intent cue</b> ("reports to" → manager) fixes the name-vs-manager clash, so "reports to Dhruv Sharma" returns her 22-person <em>team</em>, not Dhruv's own record.</p>
+  </section>
+
+  <!-- 4 -->
+  <section id="p4">
+    <span class="phase-tag">Phase 4 · Playground</span>
+    <h2>4 · Generation — the RAG loop completes</h2>
+    <p><code>generate.py</code> adds the LLM (local Claude @ <code>localhost:8080</code>) that reads retrieved cards and writes a grounded answer + sources.</p>
+    <pre>question → retrieve (Phase 3) → stuff cards into prompt → Claude answers → {answer, sources}
+                                   <span class="c">↑ this "stuffing" = Augmentation (the A in RAG)</span></pre>
+    <table>
+      <tr><th>Question</th><th>Answer</th><th>Proves</th></tr>
+      <tr><td>who is Vigneshwar's manager?</td><td>"…is Rehan Sharma."</td><td class="ok">fact lookup works</td></tr>
+      <tr><td>who reports to Dhruv Sharma?</td><td>lists all 22</td><td class="ok">complete set query</td></tr>
+      <tr><td><b>salary of Vigneshwar?</b></td><td><b>"I don't know based on the data."</b></td><td class="ok">🛡 anti-hallucination</td></tr>
+    </table>
+    <div class="callout rec">
+      <b>Most important result in the project</b>
+      There is no salary column. A naive bot would invent a number. Mine <b>refused</b> — because the system prompt says "answer ONLY from the records, else say you don't know." That's the difference between grounded RAG and a confident liar.
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="flaw">
+    <span class="phase-tag">Phase 4 · My finding</span>
+    <h2>5 · The product flaw I found</h2>
+    <div class="callout idea">
+      <b>My finding (verbatim intent)</b>
+      Users won't type exact names every time. So most questions fall back to semantic — and semantic is wrong for these. This won't hold up as a real product.
+    </div>
+    <p><b>Confirmed — and it's actually TWO bugs:</b></p>
+    <table>
+      <tr><th>Bug</th><th>Evidence from my run</th></tr>
+      <tr><td><b>1. Router misses partial names / variants</b></td><td>"who reports under <b>Reyan</b>" → SEMANTIC → 3 people. "…<b>Reyan Sharma</b>" → METADATA → 20. Same question, one word.</td></tr>
+      <tr><td><b>2. Semantic can't do "list all" at all</b></td><td>"skill of R &amp; S" → semantic said "<b>all four</b>" — but there are <b>8</b>. Capped at k, and confidently incomplete.</td></tr>
+    </table>
+    <div class="callout pin">
+      <b>Why bug 2 is the scarier one</b>
+      Bug 1 gives too few results (visibly odd). Bug 2 gives a <b>confident wrong "all"</b> — the LLM doesn't know k=4 was just the cutoff. A wrong answer that looks right is worse than "I don't know."
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="ideas">
+    <span class="phase-tag">My ideas · Verdicts</span>
+    <h2>6 · My fix ideas &amp; the verdicts</h2>
+
+    <div class="qa">
+      <p class="q">Idea A — Token / partial string matching (match any word of a known value).</p>
+      <p class="a"><span class="warn">Partial win.</span> Fixes partial names ("reyan" → Reyan Sharma), stays free &amp; transparent. <b>Does NOT fix typos</b> ("reyen"). Small false-match risk on common words.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Idea B — Run semantic FIRST, then metadata-filter using a value extracted from the semantic hits.</p>
+      <p class="a"><span class="no">Has a fatal flaw.</span> Semantic returns whole cards ranked by fuzziness — the query's own subject (e.g. Reyan's own record, whose manager is Imran Nair) ranks #1, so I can't reliably pick which field/value to filter on. It just <b>relocates</b> the matching problem into the results, with added ambiguity. <b>But</b> the instinct — "fuzzy-resolve the entity, then exact-filter for completeness" — is correct. The fix is to fuzzy-match against the small <em>known-value lists</em>, not against the documents.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Idea C — Let the LLM decide the route (read query → output {route, field, value}).</p>
+      <p class="a"><span class="ok">Strongest idea — this is how production RAG does it.</span> Tested live against the gate:</p>
+    </div>
+    <table>
+      <tr><th>Input</th><th>LLM router output</th><th></th></tr>
+      <tr><td>"reports under Reyan"</td><td>manager = Reyan Sharma</td><td class="ok">✓</td></tr>
+      <tr><td>"who works under <b>reyen</b>" (typo)</td><td>manager = Reyan Sharma</td><td class="ok">✓ fixed a typo!</td></tr>
+      <tr><td>"skill of R &amp; S"</td><td>technology = R&amp;S (Routing &amp; Switching)</td><td class="ok">✓</td></tr>
+      <tr><td>"people in the airtel <b>account</b>"</td><td>project = Airtel</td><td class="ok">✓ synonym</td></tr>
+      <tr><td>"who keeps the network reliable?"</td><td>semantic</td><td class="ok">✓ chose semantic</td></tr>
+      <tr><td>"who is <b>vignesh</b>"</td><td>name = "<b>Vignesh</b>"</td><td class="no">✗ hallucinated value</td></tr>
+    </table>
+    <div class="callout pin">
+      <b>The catch I must remember</b>
+      The LLM can <b>hallucinate a value not in the data</b> ("Vignesh" ≠ stored "Vigneshwar B"). A wrong filter value → <b>0 results, silently.</b> It also costs an extra LLM call and returns free text to parse.
+    </div>
+    <div class="callout rec">
+      <b>The winning design (Idea C + a guardrail)</b>
+      Let the LLM do the <em>understanding</em>, but <b>never trust its value blindly</b>:
+      <ul class="tight">
+        <li>LLM proposes <code>{route, field, value}</code>.</li>
+        <li>Is <code>value</code> an <b>exact</b> known value? → use it.</li>
+        <li>Not exact? → <b>fuzzy-snap</b> to the nearest known value (difflib).</li>
+        <li>No close match? → fall back to <b>semantic</b>.</li>
+      </ul>
+      = LLM for intent/typos/synonyms + validation for guaranteed-real filter values.
+    </div>
+
+    <h3>My three approaches, side by side</h3>
+    <table>
+      <tr><th>Approach</th><th>Typos</th><th>Partials</th><th>Complete "list all"</th><th>Risk</th><th>Cost</th></tr>
+      <tr><td>Exact match (current)</td><td class="no">✗</td><td class="no">✗</td><td class="ok">✓</td><td>none</td><td>free</td></tr>
+      <tr><td>Token + fuzzy (A)</td><td class="warn">~</td><td class="ok">✓</td><td class="ok">✓</td><td>low</td><td>free</td></tr>
+      <tr><td><b>LLM router + validation (C)</b></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td>hallucination (guarded)</td><td>1 call</td></tr>
+    </table>
+    <p class="status"><b>Open decision:</b> build Idea C (LLM router + validation) as the routing upgrade — likely folded into Phase 6.</p>
+  </section>
+
+  <!-- Glossary -->
+  <section id="glossary">
+    <h2>Quick glossary (for fast revision)</h2>
+    <ul class="tight">
+      <li><b>Embedding</b> — text → a vector capturing meaning; lets us search by meaning, not keywords.</li>
+      <li><b>Vector store (Chroma)</b> — DB that finds nearest vectors; persisted to <code>./chroma_db</code>.</li>
+      <li><b>Semantic search</b> — closest-vector match. Fuzzy; capped at k; can't do "list all".</li>
+      <li><b>Metadata filter</b> — exact <code>where={field:value}</code> match. Complete; needs the exact value.</li>
+      <li><b>Retrieval</b> — finding the right cards. <b>Generation</b> — LLM reading them to write the answer.</li>
+      <li><b>Augmentation</b> — stuffing retrieved cards into the prompt (the "A" in RAG).</li>
+      <li><b>Grounding</b> — answer uses only provided data; else "I don't know" (anti-hallucination).</li>
+      <li><b>LLM-as-router</b> — using the LLM to choose the retrieval strategy; validate its output against known values.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Employee RAG · personal learning log · cross-linked with
+    <a href="learning-qa.html">Learning Q&amp;A</a>
+  </footer>
+
+</div>
+</body>
+</html>
