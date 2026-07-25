@@ -130,10 +130,11 @@
       <a href="#flaw">5 · The product flaw</a>
       <a href="#ideas">6 · My fix ideas</a>
       <a href="#p5">7 · The interface</a>
+      <a href="#embed">8 · Inside embeddings</a>
       <a href="#glossary">Glossary</a>
       <a class="extlink" href="learning-qa.html">↗ Open Learning Q&amp;A</a>
     </div>
-    <p class="status"><b>Last updated:</b> after Phase 5 (interface built) · <b>Status:</b> Phases 0–5 + LLM-router upgrade done; Phase 6 (improvements) / optional Streamlit UI next.</p>
+    <p class="status"><b>Last updated:</b> after the embeddings deep-dive (section 8) · <b>Status:</b> Phases 0–5 + LLM-router upgrade done; Phase 6 (improvements) / optional Streamlit UI next.</p>
   </header>
 
   <!-- 1 -->
@@ -318,11 +319,104 @@ python src/main.py --debug    # also show the routing decision per question</pre
     <p class="status"><b>✅ VERIFIED end-to-end:</b> "who reports to Dhruv Sharma?" → METADATA route → all 22 listed. "who keeps the network reliable?" → SEMANTIC → honest <em>"I don't know based on the data"</em> — the anti-hallucination guardrail choosing to say nothing rather than guess. That's the system being <b>correct about its own limits</b>, not broken.</p>
   </section>
 
+  <!-- Section 8 — inside embeddings -->
+  <section id="embed">
+    <span class="phase-tag">Deep dive · My questions</span>
+    <h2>8 · Inside embeddings — what the numbers really are</h2>
+    <p>After the router, I wanted to <em>see</em> the actual numbers behind semantic search so it
+      would stop feeling like magic. These are the questions I asked and what I found.</p>
+
+    <div class="qa">
+      <p class="q">Q1. Can I see the embedding values the model produces for a card?</p>
+      <p class="a">Yes. Each card becomes a fixed list of <b>384 numbers</b> (this model = <code>all-MiniLM-L6-v2</code>,
+        so 384 dimensions). Each number sits roughly between −1 and +1, and the whole vector is
+        <b>normalized to length ≈ 1.0</b>.</p>
+    </div>
+    <pre><span class="c"># emb.embed_query("Vigneshwar B ... specializing in Automation.")</span>
+vector length (dimensions): 384
+   dim[ 0] = -0.15004
+   dim[ 1] = -0.00692
+   dim[ 2] = -0.06062
+   ... (381 more) ...
+magnitude of the vector: 1.0   <span class="c"># MiniLM normalizes to ~1.0</span></pre>
+
+    <div class="callout pin">
+      <b>Wording I had to fix</b>
+      It's <b>not "training."</b> The model was already trained by its makers. When we index, it only
+      <b>reads each card once and outputs a vector</b> — that step is <b>inference / encoding</b>, a frozen
+      <code>text → 384 numbers</code> function. Same input always gives the same output.
+    </div>
+
+    <div class="qa">
+      <p class="q">Q2. Are the 384 numbers "features of each word/token" that I can name?</p>
+      <p class="a"><span class="no">No — two corrections in one.</span></p>
+    </div>
+    <ul class="tight">
+      <li><b>Not per-word.</b> The 384 numbers describe the <b>whole card</b>, not each word. (Internally
+        the model makes a vector per token, then <b>pools</b> them into one sentence vector — that's what we store.)</li>
+      <li><b>Not nameable.</b> There is no <code>dim[7] = "seniority"</code> or <code>dim[42] = "automation"</code>.
+        They are <b>abstract learned axes</b> ("latent dimensions") the model invented during its own training to
+        keep similar sentences close and different ones far apart. Meaning lives in the
+        <b>pattern across all 384 together</b>, never in one axis.</li>
+    </ul>
+    <div class="callout">
+      <b>The map analogy that made it click</b>
+      A location is <code>(latitude, longitude)</code> — 2 numbers. Neither alone is "the city." Only
+      <b>together</b> do they pin a spot. Embeddings are that same idea with <b>384 axes</b> instead of 2.
+    </div>
+
+    <div class="qa">
+      <p class="q">Q3. Prove no single dimension = a human concept like "Automation".</p>
+      <p class="a">I compared the top dims of two Automation cards (a, b) against a Wireless card (c). If a
+        dimension <em>were</em> "the Automation feature", a &amp; b would share a big value there and c would differ.
+        They don't — the signal is scattered:</p>
+    </div>
+    <table>
+      <tr><th>dim</th><th>a (Automation)</th><th>b (Automation)</th><th>c (Wireless)</th><th>verdict</th></tr>
+      <tr><td>164</td><td>−0.1592</td><td>−0.0999</td><td>−0.1133</td><td>c sits <em>between</em> a &amp; b → useless as a splitter</td></tr>
+      <tr><td>373</td><td>+0.1504</td><td>+0.0326</td><td>−0.0800</td><td>leans right, but a &amp; b disagree a lot</td></tr>
+      <tr><td>227</td><td>+0.1483</td><td>+0.1591</td><td>+0.0170</td><td>closest to a theme, still not clean</td></tr>
+    </table>
+    <p>No row cleanly says "these two are Automation, that one isn't." Yet cosine similarity across
+      <b>all 384</b> ranks a↔b high (~0.52) and a↔c low. <b>Meaning is distributed, not localized.</b></p>
+
+    <div class="qa">
+      <p class="q">Q4. So how does search actually compare two of these vectors?</p>
+      <p class="a"><b>Cosine similarity</b> — the angle between vectors. 1.0 = same meaning, 0 = unrelated.
+        It matches on <em>meaning</em>, not keywords:</p>
+    </div>
+    <pre><span class="c"># query: "who works on automation and scripting?"  (note: "scripting" is in NO card)</span>
+0.5259  Vigneshwar B ... Automation      <span class="ok">#####################</span>
+0.5182  Nitesh Sharma ... Automation       <span class="ok">####################</span>
+0.1892  Aadhya Sharma ... Security        #######
+0.1358  Aarush Sharma ... Wireless               #####
+0.0373  The weather in Paris is cold.    #   <span class="c"># unrelated → ~0</span></pre>
+    <p>The model scored the Automation people highest even though I asked about "scripting" — it
+      <b>understood</b> scripting ≈ automation. That is the whole point of embeddings.</p>
+
+    <div class="callout rec">
+      <b>Why this justifies my hybrid router (the payoff)</b>
+      For <em>"list everyone who reports to Dhruv Sharma"</em>, semantic scores are middling and have
+      <b>no clean cutoff</b> (right people ~0.35–0.45, wrong people ~0.13–0.20). Semantic has no concept of
+      "return ALL 22 and only those 22." A metadata filter <code>where manager == "Dhruv Sharma"</code> returns
+      exactly 22, complete, guaranteed. <b>Fuzzy meaning → semantic. Exact complete set → metadata.</b>
+    </div>
+
+    <div class="callout">
+      <b>Bonus term</b>
+      Extracting human-nameable concepts back out of these tangled vectors is a real research area
+      (<em>mechanistic interpretability</em>, sparse autoencoders) — but the raw dimensions themselves stay unlabeled.
+    </div>
+  </section>
+
   <!-- Glossary -->
   <section id="glossary">
     <h2>Quick glossary (for fast revision)</h2>
     <ul class="tight">
       <li><b>Embedding</b> — text → a vector capturing meaning; lets us search by meaning, not keywords.</li>
+      <li><b>Dimension / latent feature</b> — one of the 384 numbers in a vector. Abstract &amp; unnameable; meaning lives in all of them together.</li>
+      <li><b>Inference / encoding</b> — the model reading a card and outputting its vector. NOT training (the model is already trained &amp; frozen).</li>
+      <li><b>Cosine similarity</b> — angle between two vectors. 1.0 = same meaning, 0 = unrelated. How semantic ranking works.</li>
       <li><b>Vector store (Chroma)</b> — DB that finds nearest vectors; persisted to <code>./chroma_db</code>.</li>
       <li><b>Semantic search</b> — closest-vector match. Fuzzy; capped at k; can't do "list all".</li>
       <li><b>Metadata filter</b> — exact <code>where={field:value}</code> match. Complete; needs the exact value.</li>
