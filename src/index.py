@@ -97,8 +97,33 @@ if __name__ == "__main__":
     print(f"Indexed {count} employees.")
 
     # Prove it works: a purely SEMANTIC search (no metadata filter yet).
-    # Note the query uses words that do NOT appear in the data on purpose.
-    query = "who keeps the network reliable and monitored?"
-    print(f"\nSemantic search test — query: {query!r}")
-    for doc in store.similarity_search(query, k=3):
-        print(f"  - {doc.metadata['name']:20s} | {doc.metadata['technology']}")
+    # We print EVERYTHING the retriever returns for each hit, so what you SEE
+    # matches what actually came back — nothing is hidden by the formatting:
+    #   - all 4 metadata fields (name, manager, project, technology)
+    #   - the full page_content card (the sentence that was embedded)
+    #   - two scores, so the ranking is not a black box:
+    #       distance  -> raw L2 distance (question vs card vector). LOWER = closer.
+    #       relevance -> LangChain's normalized 0..1 score.         HIGHER = better.
+    #     They mirror each other: small distance <=> high relevance.
+    while True:
+        query = input("\nSemantic search test — enter a question (or 'q' to quit): ")
+        if query.lower() == "q":
+            break
+        print(f"\nSemantic search test — query: {query!r}")
+
+        # (Document, distance) pairs — distance is what Chroma actually ranks by.
+        scored = store.similarity_search_with_score(query, k=3)
+        # (Document, relevance 0..1) — same order; higher = more relevant.
+        relevances = dict(
+            (d.metadata["name"], r)
+            for d, r in store.similarity_search_with_relevance_scores(query, k=3)
+        )
+        for rank, (doc, distance) in enumerate(scored, start=1):
+            m = doc.metadata
+            rel = relevances.get(m["name"], float("nan"))
+            print(f"\n  #{rank}  distance={distance:.4f}  relevance={rel:.3f}")
+            print(f"      name       : {m['name']}")
+            print(f"      manager    : {m['manager']}")
+            print(f"      project    : {m['project']}")
+            print(f"      technology : {m['technology']}")
+            print(f"      card       : {doc.page_content}")
