@@ -34,6 +34,38 @@
       padding: 32px 16px 64px;
     }
 
+    /* ---- Sticky sidebar layout (matches learnings.html / architecture.html) ---- */
+    .page { display: flex; align-items: flex-start; max-width: 1240px; margin: 0 auto; gap: 24px; padding: 24px 16px 64px; }
+    .sidebar {
+      position: sticky; top: 24px; flex: 0 0 250px; width: 250px;
+      max-height: calc(100vh - 48px); overflow-y: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .sidebar .brand { font-size: 18px; color: var(--accent); font-weight: bold; margin: 0 0 4px; }
+    .sidebar .brand-sub { font-size: 12px; color: var(--muted); margin: 0 0 16px; line-height: 1.45; }
+    .navgroup { margin-bottom: 16px; }
+    .navgroup h4 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); }
+    .sidebar nav a {
+      display: block; text-decoration: none; font-size: 13px;
+      color: var(--text); padding: 5px 10px; border-radius: 8px;
+      border-left: 3px solid transparent; margin: 1px 0; line-height: 1.35;
+    }
+    .sidebar nav a:hover { background: var(--accent-soft); border-left-color: var(--accent); }
+    .sidebar nav a .ln { font-weight: bold; color: var(--accent); }
+    .sidebar .extlink {
+      display: block; text-align: center; text-decoration: none;
+      background: var(--accent); color: #fff; font-weight: bold; font-size: 13px;
+      padding: 8px 12px; border-radius: 999px; margin-top: 6px;
+    }
+    .sidebar .extlink:hover { background: #0b5c55; }
+    .content { flex: 1 1 auto; min-width: 0; max-width: 940px; }
+    @media (max-width: 900px) {
+      .page { flex-direction: column; }
+      .sidebar { position: static; width: 100%; flex-basis: auto; max-height: none; }
+    }
+
     header {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -114,7 +146,33 @@
   </style>
 </head>
 <body>
-  <main class="container">
+  <div class="page">
+
+  <aside class="sidebar">
+    <p class="brand">Learning Q&amp;A</p>
+    <p class="brand-sub">Concept lessons, interview answers, and checkpoint questions — one card each.</p>
+    <div class="navgroup">
+      <h4>Lessons</h4>
+      <nav>
+        <a href="#lesson-001"><span class="ln">001</span> · BM25 Retriever</a>
+        <a href="#lesson-002"><span class="ln">002</span> · Embedding Model Options</a>
+        <a href="#lesson-003"><span class="ln">003</span> · Triple-Hybrid Retrieval</a>
+        <a href="#lesson-004"><span class="ln">004</span> · Semantic vs Keyword vs Metadata</a>
+        <a href="#lesson-005"><span class="ln">005</span> · Scaling to a Huge RFC Corpus</a>
+        <a href="#lesson-006"><span class="ln">006</span> · Temperature in an LLM</a>
+        <a href="#template-next-lesson">＋ Template for next lesson</a>
+      </nav>
+    </div>
+    <div class="navgroup">
+      <h4>Reference</h4>
+      <nav>
+        <a href="learnings.html">↩ Playground Learnings</a>
+      </nav>
+      <a class="extlink" href="architecture.html">↗ Architecture &amp; Diagrams</a>
+    </div>
+  </aside>
+
+  <main class="content">
     <header>
       <h1>Employee RAG Learning Q&A</h1>
       <p class="subtitle">Your running notes for concepts, interview questions, and answers.</p>
@@ -122,6 +180,10 @@
         <a href="learnings.html"
            style="text-decoration:none;font-size:14px;font-weight:bold;padding:6px 14px;border-radius:999px;background:#0f766e;color:#fff;border:1px solid #0f766e;">
           ↗ Open My Playground Learnings
+        </a>
+        <a href="architecture.html"
+           style="text-decoration:none;font-size:14px;font-weight:bold;padding:6px 14px;border-radius:999px;background:#0f766e;color:#fff;border:1px solid #0f766e;margin-left:8px;">
+          ↗ Open Architecture &amp; Diagrams
         </a>
       </p>
     </header>
@@ -391,6 +453,140 @@
       </div>
     </section>
 
+    <section class="card" id="lesson-005">
+      <h2>Lesson 005: Scaling from a Small Excel to a Huge RFC / Document Corpus</h2>
+      <p class="meta">Date: 2026-07-26 · Interview question</p>
+
+      <h3>The Question</h3>
+      <p>"You built this over an Excel sheet. What if instead you had a huge collection of RFC papers
+        and reference links — how would the approach change?"</p>
+
+      <h3>The Key Insight (lead with this)</h3>
+      <p>The Excel design works <strong>because</strong> the data is small, structured, and categorical —
+        97 clean rows with fixed fields. That is what let me treat <strong>one row = one document</strong>
+        and do exact metadata filtering. RFC papers break <em>all</em> of those assumptions, so the
+        architecture shifts from "one row = one document" to a <strong>chunking + embedding pipeline</strong>.
+        The hybrid + metadata instinct stays right; it just scales up.</p>
+
+      <h3>What Changes, Step by Step</h3>
+      <ol>
+        <li><strong>Parsing:</strong> Excel was already structured. RFCs are long semi-structured text
+          (PDF/HTML/txt) + links → use loaders (PyPDF, Unstructured) that extract clean text and preserve
+          structure (RFC number, title, section headings).</li>
+        <li><strong>Chunking — the big new step:</strong> a 40-page RFC can't be one vector (token limits;
+          one embedding averages away all meaning). Split into <strong>chunks</strong> (~500–1000 tokens,
+          10–15% overlap so a boundary-split sentence isn't lost). Now <strong>one chunk = one document</strong>.</li>
+        <li><strong>Metadata per chunk:</strong> attach <code>{rfc_number, title, section, url, status}</code>
+          to every chunk — this is the Excel instinct surviving: "find this in RFC 2616 §14" becomes a
+          metadata filter, just like "manager == Dhruv Sharma".</li>
+        <li><strong>Approximate retrieval:</strong> 97 rows → millions of chunks. Brute-force similarity
+          dies; use an <strong>ANN index</strong> (HNSW/IVF) in a real vector DB.</li>
+        <li><strong>Hybrid matters even more:</strong> RFCs are full of exact identifiers ("RFC 5246",
+          "TLS 1.2", header names) → keyword/BM25 nails those where pure embeddings fumble.</li>
+        <li><strong>Re-ranking:</strong> huge corpora give noisy top-k → add a <strong>cross-encoder
+          re-ranker</strong> to reorder top ~50 down to the best ~5 before the prompt. (Small Excel didn't need this.)</li>
+        <li><strong>References / links:</strong> store each link as source metadata for citations; or go further
+          with <strong>GraphRAG</strong> — model RFC→RFC references as a graph so "what does RFC X depend on?"
+          is a traversal, not a similarity search.</li>
+      </ol>
+
+      <h3>Trade-offs to Say Out Loud</h3>
+      <ul>
+        <li><strong>Chunk size:</strong> small = precise but context-poor; large = more context but noisier,
+          diluted embeddings. Overlap helps but costs storage.</li>
+        <li><strong>Cost / latency:</strong> millions of chunks → embedding cost, storage, ANN tuning; the
+          re-ranker adds a second model hop.</li>
+        <li><strong>Freshness:</strong> RFCs get obsoleted → carry <code>status: "obsoleted by RFC N"</code>
+          in metadata or you surface stale answers.</li>
+      </ul>
+
+      <h3>Interview-Ready One-Liner</h3>
+      <p class="highlight">Excel let me treat one row as one document with clean metadata. A large RFC
+        corpus flips that — the work moves into a chunking + embedding pipeline with metadata per chunk,
+        an ANN-backed hybrid index, and a cross-encoder re-ranker; the hybrid-and-metadata instinct from
+        the small project is exactly right, it just scales up with chunking and approximate search.</p>
+
+      <div class="qa">
+        <h3>Checkpoint Questions</h3>
+        <ol>
+          <li>Why can't you embed a whole 40-page RFC as a single vector — what two problems does chunking solve?</li>
+          <li>Why does hybrid (keyword + semantic) matter <em>more</em> for RFCs than it did for the Excel sheet?</li>
+          <li>What does a cross-encoder re-ranker add that ANN vector search alone doesn't — and why didn't the Excel project need one?</li>
+          <li>How would you stop the system from answering with an RFC that has been obsoleted?</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="card" id="lesson-006">
+      <h2>Lesson 006: Temperature in an LLM</h2>
+      <p class="meta">Date: 2026-07-26</p>
+
+      <h3>What It Is</h3>
+      <p>When an LLM generates a token it produces a <strong>probability distribution</strong> over all
+        possible next tokens. Temperature is a knob that <strong>reshapes that distribution</strong> before
+        a token is sampled. Mechanically, the raw scores (logits) are divided by the temperature before the
+        softmax: dividing by a small number exaggerates the gaps (winner takes all); dividing by a big number
+        flattens them (everything gets a chance).</p>
+      <ul>
+        <li><strong>Low (→ 0):</strong> sharpens the distribution → <strong>deterministic, predictable</strong>
+          (same prompt → same answer).</li>
+        <li><strong>High (→ 1 and above):</strong> flattens the distribution → <strong>varied, creative, riskier</strong>
+          (same prompt → different answers).</li>
+      </ul>
+
+      <h3>Simple Example</h3>
+      <p>After <em>"The network protocol is"</em>, suppose the base probabilities are TCP 0.70, UDP 0.20, "banana" 0.001:</p>
+      <ul>
+        <li><strong>temp = 0</strong> → picks "TCP" every time; the rest are silenced.</li>
+        <li><strong>temp = 0.7</strong> → usually "TCP", sometimes "UDP" — natural variety.</li>
+        <li><strong>temp = 1.5</strong> → "TCP"/"UDP" often, but now "banana" has a real shot → creative but can derail.</li>
+      </ul>
+
+      <h3>Why It Matters in This Project</h3>
+      <p>Every LLM call in <code>generate.py</code> and <code>retrieval.py</code> uses
+        <code>temperature=0</code>. That is the correct choice because:</p>
+      <ol>
+        <li><strong>It's a factual lookup, not a creative tool</strong> — "who is X's manager?" has one right
+          answer; I want the same correct answer every time.</li>
+        <li><strong>The router emits JSON</strong> — <code>llm_route()</code> needs stable, parseable
+          <code>{route, field, value}</code>; higher temp risks the model breaking the format.</li>
+        <li><strong>Grounding / anti-hallucination</strong> — higher temp increases the chance the model
+          wanders off the retrieved cards, the opposite of what a grounded RAG wants.</li>
+      </ol>
+
+      <h3>When You'd Raise It</h3>
+      <ul>
+        <li>Factual Q&amp;A, routing, extraction, JSON (this project): <strong>0 – 0.3</strong> — correctness &amp; determinism.</li>
+        <li>Summaries, rephrasing, chat: <strong>~0.5 – 0.7</strong> — natural but grounded.</li>
+        <li>Brainstorming, creative copy, name ideas: <strong>~0.8 – 1.2</strong> — you <em>want</em> variety.</li>
+      </ul>
+
+      <h3>Two Things People Mix Up</h3>
+      <ul>
+        <li><strong>Temperature vs. top-p (nucleus sampling):</strong> both control randomness. Temperature
+          rescales <em>all</em> probabilities; top-p instead truncates to the smallest set of tokens whose
+          probability sums to <code>p</code> (e.g. 0.9) and samples among those. Usually tune one, not both.</li>
+        <li><strong>temp 0 ≠ perfectly deterministic:</strong> it's <em>effectively</em> deterministic, but
+          floating-point/hardware and load-balanced backends can still vary occasionally.</li>
+      </ul>
+
+      <h3>Interview-Ready One-Liner</h3>
+      <p class="highlight">Temperature scales the logits before sampling — low temperature sharpens toward
+        the top token (deterministic, factual), high temperature flattens the distribution (creative, varied).
+        I use 0 across my RAG system because it's a factual lookup with JSON routing and strict grounding,
+        where I want the same correct answer and stable output every time.</p>
+
+      <div class="qa">
+        <h3>Checkpoint Questions</h3>
+        <ol>
+          <li>Mechanically, what does dividing the logits by the temperature do to the gaps between token scores?</li>
+          <li>Why would <code>temperature=0</code> be the safest setting for the JSON router in <code>llm_route()</code>?</li>
+          <li>What's the difference between temperature and top-p, and when might you reach for top-p instead?</li>
+          <li>Give one task where you'd deliberately set a high temperature — and why it's fine there but wrong for this project.</li>
+        </ol>
+      </div>
+    </section>
+
     <section class="card" id="template-next-lesson">
       <h2>Template for Next Lesson</h2>
       <p class="meta">Copy this structure for each new concept.</p>
@@ -408,5 +604,6 @@
       File: docs/learning-qa.html
     </footer>
   </main>
+  </div><!-- /.page -->
 </body>
 </html>

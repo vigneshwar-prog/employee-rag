@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee RAG — Architecture & Flow Diagrams</title>
+  <style>
+    :root {
+      --bg: #f6f6f2;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --border: #d1d5db;
+      --good: #15803d;
+      --bad: #b91c1c;
+      --warn: #b45309;
+      --purple: #7c3aed;
+      --code-bg: #0f172a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 0% 0%, #e6fffa 0%, transparent 35%),
+        radial-gradient(circle at 100% 100%, #ecfeff 0%, transparent 35%),
+        var(--bg);
+      line-height: 1.6;
+    }
+    .page { display: flex; align-items: flex-start; max-width: 1240px; margin: 0 auto; gap: 24px; padding: 24px 16px 64px; }
+    .sidebar {
+      position: sticky; top: 24px; flex: 0 0 240px; width: 240px;
+      max-height: calc(100vh - 48px); overflow-y: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .sidebar .brand { font-size: 18px; color: var(--accent); font-weight: bold; margin: 0 0 4px; }
+    .sidebar .brand-sub { font-size: 12px; color: var(--muted); margin: 0 0 16px; line-height: 1.45; }
+    .navgroup { margin-bottom: 16px; }
+    .navgroup h4 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); }
+    .sidebar nav a {
+      display: block; text-decoration: none; font-size: 13.5px;
+      color: var(--text); padding: 5px 10px; border-radius: 8px;
+      border-left: 3px solid transparent; margin: 1px 0; line-height: 1.35;
+    }
+    .sidebar nav a:hover { background: var(--accent-soft); border-left-color: var(--accent); }
+    .sidebar .extlink {
+      display: block; text-align: center; text-decoration: none;
+      background: var(--accent); color: #fff; font-weight: bold; font-size: 13px;
+      padding: 8px 12px; border-radius: 999px; margin-top: 6px;
+    }
+    .sidebar .extlink:hover { background: #0b5c55; }
+    .content { flex: 1 1 auto; min-width: 0; max-width: 940px; }
+    @media (max-width: 900px) {
+      .page { flex-direction: column; }
+      .sidebar { position: static; width: 100%; flex-basis: auto; max-height: none; }
+    }
+    header {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px 32px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    header h1 { margin: 0 0 6px; font-size: 30px; color: var(--accent); }
+    header p { margin: 4px 0; color: var(--muted); }
+    section {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px 32px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    h2 { color: var(--accent); border-bottom: 2px solid var(--accent-soft); padding-bottom: 8px; margin-top: 4px; font-size: 23px; }
+    h3 { font-size: 17px; margin: 22px 0 8px; }
+    code {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      background: #eef2f1; color: #0b3b37; padding: 1px 6px; border-radius: 4px; font-size: 0.88em;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin: 6px 0 4px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); }
+    .callout {
+      border-left: 4px solid var(--accent); background: #f0fdfa;
+      padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 15px;
+    }
+    .callout b { display: block; margin-bottom: 4px; }
+
+    /* ---------- Diagram primitives (pure CSS boxes + connectors) ---------- */
+    .diagram { margin: 18px 0 6px; }
+    .layer { margin: 0 0 6px; }
+    .layer-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+      color: var(--muted); font-weight: bold; margin: 14px 0 6px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: stretch; }
+    .node {
+      flex: 1 1 0; min-width: 150px; max-width: 260px;
+      border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px;
+      background: #fff; text-align: center; position: relative;
+    }
+    .node .t { font-weight: bold; font-size: 14.5px; display: block; }
+    .node .s { font-size: 12px; color: var(--muted); display: block; margin-top: 3px; }
+    .node code { font-size: 11.5px; background: #f1f5f4; }
+    .node.ui      { border-color: #2563eb; background: #eff6ff; }
+    .node.engine  { border-color: var(--accent); background: #ecfeff; }
+    .node.retr    { border-color: var(--purple); background: #f5f3ff; }
+    .node.store   { border-color: var(--warn); background: #fffbeb; }
+    .node.ext     { border-color: #0891b2; background: #ecfeff; border-style: dashed; }
+    .node.data    { border-color: var(--good); background: #f0fdf4; }
+    .arrow-down { text-align: center; color: var(--accent); font-size: 20px; line-height: 1; margin: 3px 0; }
+    .arrow-lbl { text-align: center; font-size: 11.5px; color: var(--muted); margin: 1px 0 2px; font-style: italic; }
+    .bidi { text-align:center; color: var(--warn); font-size: 18px; margin: 2px 0; }
+
+    /* ---- LLD flowchart primitives ---- */
+    .flow { max-width: 760px; margin: 16px auto 4px; }
+    .fnode {
+      border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 14px;
+      background: #fff; margin: 0 auto; max-width: 620px;
+    }
+    .fnode .t { font-weight: bold; font-size: 14px; }
+    .fnode .s { font-size: 12.5px; color: var(--muted); }
+    .fnode code { font-size: 11.5px; background: #f1f5f4; }
+    .fnode.entry  { border-color: #2563eb; background: #eff6ff; }
+    .fnode.proc   { border-color: var(--accent); background: #ecfeff; }
+    .fnode.llm    { border-color: #0891b2; background: #ecfeff; border-style: dashed; }
+    .fnode.guard  { border-color: var(--purple); background: #f5f3ff; }
+    .fnode.out    { border-color: var(--good); background: #f0fdf4; }
+    .decision {
+      border: 1.5px solid var(--warn); background: #fffbeb; border-radius: 10px;
+      padding: 10px 14px; margin: 0 auto; max-width: 620px; text-align: center; font-weight: bold; font-size: 13.5px;
+    }
+    .fdown { text-align: center; color: var(--accent); font-size: 18px; line-height: 1; margin: 4px 0; }
+    .branch { display: flex; gap: 12px; margin: 6px 0; }
+    .branch > div { flex: 1 1 0; }
+    .blabel { font-size: 11.5px; color: var(--muted); font-style: italic; text-align: center; margin: 2px 0; }
+    .fnote { font-size: 12px; color: var(--muted); text-align: center; margin: 3px auto; max-width: 620px; }
+
+    /* ---- Phase timeline ---- */
+    .timeline { margin: 18px 0 4px; }
+    .pcard {
+      display: grid; grid-template-columns: 96px 1fr; gap: 0;
+      border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden;
+      margin-bottom: 10px; background: #fff;
+    }
+    .pcard .badge {
+      background: var(--accent-soft); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; padding: 10px 6px;
+    }
+    .pcard .badge .n { font-size: 19px; font-weight: bold; color: var(--accent); line-height: 1.05; }
+    .pcard .badge .k { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; margin-top: 4px; font-weight: bold; color: var(--muted); }
+    .pcard.ask .badge { background: #f3e8ff; }
+    .pcard.ask .badge .n { color: var(--purple); }
+    .pcard .body { padding: 10px 16px; }
+    .pcard .body .h { font-weight: bold; font-size: 15px; }
+    .pcard .body .fn { font-size: 12px; color: var(--muted); font-style: italic; margin: 2px 0 5px; }
+    .pcard .body .learn { font-size: 13.5px; }
+    .pcard .body .learn b { color: var(--accent); }
+
+    /* ---- Production HLD: tiers + trade-offs ---- */
+    .tier {
+      border: 1.5px dashed var(--border); border-radius: 12px; padding: 10px 14px 14px;
+      margin: 0 0 8px; background: rgba(255,255,255,.55);
+    }
+    .tier > .tl {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+      color: var(--muted); font-weight: bold; margin: 0 0 8px;
+    }
+    .tier.edge  { border-color: #2563eb; background: #eff6ff; }
+    .tier.auth  { border-color: var(--purple); background: #f5f3ff; }
+    .tier.app   { border-color: var(--accent); background: #ecfeff; }
+    .tier.serve { border-color: var(--warn); background: #fffbeb; }
+    .tier.data  { border-color: var(--good); background: #f0fdf4; }
+    .tier.obs   { border-color: #0891b2; background: #ecfeff; }
+    .tradeoff {
+      border-left: 4px solid var(--warn); background: #fffbeb;
+      padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 10px 0; font-size: 13.5px;
+    }
+    .tradeoff b { color: var(--warn); }
+    .tradeoff .pick { color: var(--good); font-weight: bold; }
+    .talk { counter-reset: step; margin: 8px 0; padding: 0; list-style: none; }
+    .talk li {
+      position: relative; padding: 6px 0 6px 40px; border-bottom: 1px dashed var(--border); font-size: 14px;
+    }
+    .talk li:last-child { border-bottom: none; }
+    .talk li::before {
+      counter-increment: step; content: counter(step);
+      position: absolute; left: 0; top: 6px; width: 26px; height: 26px;
+      background: var(--accent); color: #fff; border-radius: 50%;
+      text-align: center; line-height: 26px; font-weight: bold; font-size: 13px; font-family: sans-serif;
+    }
+    table.contrast { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+    table.contrast th, table.contrast td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    table.contrast th { background: var(--accent-soft); color: #0b3b37; }
+    table.contrast td:first-child { font-weight: bold; white-space: nowrap; }
+
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <aside class="sidebar">
+    <p class="brand">Employee RAG</p>
+    <p class="brand-sub">Architecture &amp; flow diagrams — how the whole system fits together, end to end.</p>
+    <div class="navgroup">
+      <h4>Diagrams</h4>
+      <nav>
+        <a href="#hld">1 · HLD — built today</a>
+        <a href="#hld-prod">1b · HLD — production</a>
+        <a href="#lld">2 · LLD — function flow</a>
+        <a href="#phases">3 · Phase-by-phase</a>
+      </nav>
+    </div>
+    <div class="navgroup">
+      <h4>Reference</h4>
+      <nav>
+        <a href="learnings.html">↩ Back to Learnings</a>
+      </nav>
+      <a class="extlink" href="learning-qa.html">↗ Learning Q&amp;A</a>
+    </div>
+  </aside>
+
+  <div class="content">
+
+  <header>
+    <h1>Architecture &amp; Flow Diagrams</h1>
+    <p>Three views of the same system: the <b>HLD</b> (how the big pieces connect), the <b>LLD</b>
+      (the exact function call chain for one question), and a <b>phase-by-phase</b> map of what was
+      built and learned at each step.</p>
+    <p><em>Companion to <a href="learnings.html">My Learnings</a> — this doc is the pictures, that one is the story.</em></p>
+  </header>
+
+  <!-- ============================ 1 · HLD ============================ -->
+  <section id="hld">
+    <h2>1 · High-Level Design — what's built today (learning project)</h2>
+    <p>Two paths meet at the vector store: an <b>offline build path</b> (left → indexes the Excel once)
+      and the <b>live query path</b> (top → answers a question). Everything talks to a
+      <b>local Claude gate</b> — no cloud, no API key, no data leaving the machine. <em>This is the
+      prototype; §1b below productionizes it.</em></p>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#eff6ff;border-color:#2563eb"></span> Interface</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0f766e"></span> Engine</span>
+      <span><span class="swatch" style="background:#f5f3ff;border-color:#7c3aed"></span> Retrieval</span>
+      <span><span class="swatch" style="background:#fffbeb;border-color:#b45309"></span> Store</span>
+      <span><span class="swatch" style="background:#f0fdf4;border-color:#15803d"></span> Build / data</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0891b2;border-style:dashed"></span> External dep</span>
+    </div>
+
+    <div class="diagram">
+      <div class="layer-label">Live query path</div>
+      <div class="row">
+        <div class="node ui"><span class="t">User</span><span class="s">asks a natural-language question</span></div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="row">
+        <div class="node ui"><span class="t">CLI</span><span class="s"><code>main.py</code> · memory + reset</span></div>
+        <div class="node ui"><span class="t">Web UI</span><span class="s"><code>app.py</code> · Streamlit</span></div>
+      </div>
+      <div class="arrow-lbl">both call the same engine — <code>answer()</code></div>
+      <div class="arrow-down">↓</div>
+      <div class="row">
+        <div class="node engine"><span class="t">RAG Engine</span><span class="s"><code>generate.answer()</code><br>retrieve → augment → generate</span></div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="row">
+        <div class="node retr"><span class="t">Hybrid Retriever</span><span class="s"><code>retrieval.py</code><br>LLM router + guardrail + fallback</span></div>
+      </div>
+      <div class="bidi">⇅ &nbsp;exact filter <code>where{}</code> &nbsp;/&nbsp; semantic <code>similarity_search</code></div>
+      <div class="row">
+        <div class="node store"><span class="t">Chroma vector store</span><span class="s">97 employee cards · vectors + metadata<br><code>./chroma_db</code> (persistent)</span></div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <div class="layer-label">Offline build path (run once when the Excel changes)</div>
+      <div class="row">
+        <div class="node data"><span class="t">Excel sheet</span><span class="s"><code>employees.xlsx</code><br>Name · Manager · Project · Technology</span></div>
+        <div class="node data"><span class="t">Load &amp; clean</span><span class="s"><code>data.py</code><br>→ 97 Documents (card + metadata)</span></div>
+        <div class="node data"><span class="t">Embed &amp; index</span><span class="s"><code>index.py</code><br>MiniLM → vectors → Chroma</span></div>
+      </div>
+      <div class="arrow-lbl">writes vectors + metadata into the same store the query path reads</div>
+    </div>
+
+    <div class="diagram">
+      <div class="layer-label">External dependency (used by both paths)</div>
+      <div class="row">
+        <div class="node ext"><span class="t">Local Claude gate</span><span class="s"><code>localhost:8080</code> · OpenAI-compatible<br>routing + generation · no key, no cost</span></div>
+        <div class="node ext"><span class="t">Local embeddings</span><span class="s">MiniLM <code>all-MiniLM-L6-v2</code><br>384-dim · runs offline on CPU</span></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>The one architectural idea to remember</b>
+      Retrieval is <b>hybrid</b>, not pure vector search. Small, categorical data (7 managers,
+      ~9 projects, 12 technologies, 97 names) means "list everyone on MPLS" is an <i>exact filter</i>,
+      while "who keeps the network reliable?" is a <i>semantic</i> match. The retriever picks per question.
+    </div>
+  </section>
+
+  <!-- ==================== 1b · PRODUCTION HLD ==================== -->
+  <section id="hld-prod">
+    <h2>1b · Production HLD — “if we hosted this for real”</h2>
+    <p>Same core idea (hybrid RAG over employee data), but now designed to survive <b>real traffic</b>
+      and enforce <b>who-can-see-what</b>. The whiteboard version to draw in an interview — top-to-bottom
+      request flow, with the trade-off at each tier called out.</p>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#eff6ff;border-color:#2563eb"></span> Edge</span>
+      <span><span class="swatch" style="background:#f5f3ff;border-color:#7c3aed"></span> Auth</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0f766e"></span> App tier</span>
+      <span><span class="swatch" style="background:#fffbeb;border-color:#b45309"></span> Serving / data</span>
+      <span><span class="swatch" style="background:#f0fdf4;border-color:#15803d"></span> Ingestion</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0891b2"></span> Cross-cutting</span>
+    </div>
+
+    <div class="diagram">
+      <div class="tier edge">
+        <div class="tl">① Client &amp; Edge — absorb and shape traffic</div>
+        <div class="row">
+          <div class="node ui"><span class="t">Clients</span><span class="s">web app · API consumers</span></div>
+          <div class="node ui"><span class="t">CDN</span><span class="s">static assets · TLS</span></div>
+          <div class="node ui"><span class="t">API Gateway / LB</span><span class="s">TLS term · routing · <b>rate-limit</b> · WAF</span></div>
+        </div>
+      </div>
+      <div class="arrow-down">↓ <span style="font-size:12px;color:#6b7280">authenticated, rate-limited request</span></div>
+
+      <div class="tier auth">
+        <div class="tl">② Identity — authN then authZ</div>
+        <div class="row">
+          <div class="node retr"><span class="t">OAuth2 / OIDC</span><span class="s">login → JWT (already used on my MCP server)</span></div>
+          <div class="node retr"><span class="t">JWT validation</span><span class="s">at gateway · scopes · per-tenant claims</span></div>
+          <div class="node retr"><span class="t">AuthZ / ACL service</span><span class="s">→ the user's <b>allowed filters</b> (which employees they may see)</span></div>
+        </div>
+      </div>
+      <div class="arrow-down">↓ <span style="font-size:12px;color:#6b7280">request + identity + ACL scope</span></div>
+
+      <div class="tier app">
+        <div class="tl">③ Stateless app tier — scale horizontally</div>
+        <div class="row">
+          <div class="node engine"><span class="t">RAG service ×N</span><span class="s">the <code>answer()</code> engine, containerized · <b>autoscaled (HPA)</b> behind LB</span></div>
+          <div class="node store"><span class="t">Redis — sessions</span><span class="s">conversation memory moved OUT of process (Phase 8b was in-RAM)</span></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div class="node ui"><span class="t">Request queue</span><span class="s">Kafka / RabbitMQ — buffer slow LLM calls</span></div>
+          <div class="node engine"><span class="t">Worker pool ×M</span><span class="s">consume queue · call LLM · stream (SSE) back</span></div>
+        </div>
+      </div>
+      <div class="arrow-down">↓ <span style="font-size:12px;color:#6b7280">retrieve (ACL-filtered) &amp; generate</span></div>
+
+      <div class="tier serve">
+        <div class="tl">④ Serving &amp; data tier — the expensive hops</div>
+        <div class="row">
+          <div class="node store"><span class="t">Vector DB (managed)</span><span class="s">pgvector / Pinecone / Milvus · metadata ACL filters</span></div>
+          <div class="node ext"><span class="t">LLM serving</span><span class="s">gate as a service · batching · concurrency &amp; token limits</span></div>
+          <div class="node ext"><span class="t">Embeddings service</span><span class="s">shared, warm, batched</span></div>
+          <div class="node store"><span class="t">Cache (Redis)</span><span class="s"><b>semantic cache</b> — hot queries &amp; embeddings</span></div>
+        </div>
+      </div>
+
+      <div class="layer-label">⑤ Ingestion pipeline (offline, scheduled)</div>
+      <div class="row">
+        <div class="node data"><span class="t">HR system / Excel</span><span class="s">source of truth</span></div>
+        <div class="node data"><span class="t">ETL + embed job</span><span class="s">clean → embed → write index</span></div>
+        <div class="node data"><span class="t">Versioned index</span><span class="s"><b>blue/green</b> reindex → atomic swap</span></div>
+      </div>
+
+      <div class="layer-label">⑥ Cross-cutting (wraps everything)</div>
+      <div class="row">
+        <div class="node ext"><span class="t">Observability</span><span class="s">OpenTelemetry · Prometheus · Grafana · Splunk</span></div>
+        <div class="node ext"><span class="t">Secrets &amp; config</span><span class="s">vault · per-env</span></div>
+        <div class="node ext"><span class="t">Cost &amp; quota</span><span class="s">per-tenant limits · token budgets</span></div>
+      </div>
+    </div>
+
+    <h3>Trade-offs to say out loud (the part that scores)</h3>
+
+    <div class="tradeoff">
+      <b>Traffic / scaling:</b> sync request→response vs. <b>async queue + workers</b>.
+      <span class="pick">Pick: async for the LLM hop.</span> The model call is slow (hundreds of ms–seconds),
+      so a synchronous tier ties up a thread per request and collapses under a spike. A queue + worker
+      pool decouples arrival rate from processing rate and lets each scale independently — cost is an
+      added latency floor and more moving parts, so keep a fast sync path for cache hits.
+    </div>
+
+    <div class="tradeoff">
+      <b>Statelessness:</b> in-process memory (today) vs. <b>Redis-backed sessions</b>.
+      <span class="pick">Pick: externalize state.</span> The moment there's more than one replica, in-RAM
+      history (Phase 8b) breaks — turn 2 may hit a different pod that never saw turn 1. Session state in
+      Redis makes every replica interchangeable, which is what lets the app tier autoscale at all.
+    </div>
+
+    <div class="tradeoff">
+      <b>Authorization in RAG — the subtle trap:</b> <b>filter-before-retrieve</b> vs. filter-after.
+      <span class="pick">Pick: apply the user's ACL as metadata filters INSIDE retrieval.</span> If you
+      retrieve freely and filter the final text, forbidden records still entered the LLM's context and can
+      leak through the answer. Enforce the ACL as a <code>where</code> filter at the vector query (and at
+      <code>_execute_plan</code>'s <code>store.get</code>) so the model never sees what the user can't.
+    </div>
+
+    <div class="tradeoff">
+      <b>Tenant isolation:</b> shared index + metadata ACLs vs. <b>index-per-tenant</b>.
+      <span class="pick">Pick: depends on blast-radius tolerance.</span> Shared index is cheap and simple
+      but one ACL bug leaks across tenants; per-tenant indexes give hard isolation at higher ops/cost.
+      Start shared with strict filters; graduate sensitive tenants to dedicated indexes.
+    </div>
+
+    <div class="tradeoff">
+      <b>LLM as the bottleneck:</b> call the model every time vs. <b>cache + degrade</b>.
+      <span class="pick">Pick: semantic cache + timeouts + graceful degradation.</span> Coalesce identical
+      in-flight questions, cache hot answers/embeddings, cap concurrency, and on timeout fall back to
+      retrieval-only ("here are the matching records") rather than failing. Trade: cache staleness vs. cost
+      &amp; latency — bound it with a short TTL and invalidate on reindex.
+    </div>
+
+    <div class="tradeoff">
+      <b>Vector store:</b> embedded Chroma (today) vs. <b>managed/distributed</b> (pgvector / Pinecone / Milvus).
+      <span class="pick">Pick: managed once it's multi-replica.</span> Embedded is perfect for a single-node
+      prototype but can't be shared across pods or scaled/replicated. Managed adds cost and a network hop
+      but gives durability, concurrency, and horizontal scale.
+    </div>
+
+    <div class="tradeoff">
+      <b>Freshness vs. availability:</b> live-mutate the index vs. <b>blue/green reindex</b>.
+      <span class="pick">Pick: versioned index + atomic swap.</span> HR data changes rarely, so rebuild a
+      new index offline and swap pointers — readers never see a half-updated index. Trade: a bounded
+      staleness window between HR change and swap, which is fine for this domain.
+    </div>
+
+    <h3>How I'd draw it live (talk track)</h3>
+    <ol class="talk">
+      <li><b>Start with the client &amp; the ask</b> — "users ask NL questions; expect bursty traffic." Draw the box, state QPS/latency targets to frame the rest.</li>
+      <li><b>Edge: gateway + LB</b> — TLS, routing, and <b>rate-limiting</b> first, so overload is shed at the door.</li>
+      <li><b>Auth in two steps</b> — OAuth/OIDC for <i>who you are</i> (JWT), then an ACL service for <i>what you may see</i>. Flag that this feeds retrieval filters (foreshadow the trap).</li>
+      <li><b>Stateless app tier behind an LB</b> — N replicas, autoscaled; call out that memory must move to Redis for this to work.</li>
+      <li><b>Introduce the async path</b> — queue + workers for the slow LLM call; explain the throughput/resilience win and the latency cost.</li>
+      <li><b>Serving tier</b> — vector DB + LLM serving + embeddings + cache. Name the LLM as the bottleneck and how caching/limits tame it.</li>
+      <li><b>The RAG-authorization trap</b> — spend real time here: filter-before-retrieve so context never contains forbidden rows. This is the differentiator most candidates miss.</li>
+      <li><b>Ingestion &amp; freshness</b> — offline embed job, blue/green index swap.</li>
+      <li><b>Wrap with observability &amp; cost</b> — OTel/Prometheus/Grafana/Splunk, per-tenant quotas. Close by restating the one or two trade-offs you'd revisit under different scale.</li>
+    </ol>
+
+    <h3>What changes from the prototype</h3>
+    <table class="contrast">
+      <tr><th>Concern</th><th>Learning project (today)</th><th>Production</th></tr>
+      <tr><td>Interface</td><td>CLI + Streamlit, single user</td><td>Web/API behind CDN + gateway</td></tr>
+      <tr><td>Auth</td><td>none (localhost)</td><td>OAuth/OIDC + JWT + ACL service</td></tr>
+      <tr><td>Scaling</td><td>one process</td><td>N stateless replicas, HPA, async workers</td></tr>
+      <tr><td>Memory</td><td>in-RAM (Phase 8b)</td><td>Redis sessions (replica-safe)</td></tr>
+      <tr><td>Vector store</td><td>embedded Chroma on disk</td><td>managed/distributed vector DB</td></tr>
+      <tr><td>LLM</td><td>local gate, one call/req</td><td>model-serving svc + semantic cache + limits</td></tr>
+      <tr><td>Authz in RAG</td><td>n/a — all data visible</td><td>ACL as metadata filter, pre-retrieval</td></tr>
+      <tr><td>Ingestion</td><td>manual re-run of index.py</td><td>scheduled ETL + blue/green reindex</td></tr>
+      <tr><td>Ops</td><td>print/debug flag</td><td>OTel · Prometheus · Grafana · Splunk · quotas</td></tr>
+    </table>
+
+    <div class="callout">
+      <b>Honest framing for the interview</b>
+      Lead with what's real — "I built the prototype and put OAuth on my MCP server" — then present this as
+      "how I'd productionize it." The one insight to land hard is the <b>filter-before-retrieve</b>
+      authorization point: it's RAG-specific, most people miss it, and it shows you think about security,
+      not just boxes and arrows.
+    </div>
+  </section>
+
+  <!-- ============================ 2 · LLD ============================ -->
+  <section id="lld">
+    <h2>2 · Low-Level Design (function call flow, end to end)</h2>
+    <p>One question's journey through the real functions. Each routing step
+      <b>degrades gracefully</b> to the next (LLM → rule-based → semantic), and the LLM's answer is
+      never trusted blindly — its proposed value is snapped to real data by <code>resolve_value()</code>
+      before any filter runs.</p>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#eff6ff;border-color:#2563eb"></span> Entry / UX</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0f766e"></span> Engine step</span>
+      <span><span class="swatch" style="background:#ecfeff;border-color:#0891b2;border-style:dashed"></span> LLM call (gate)</span>
+      <span><span class="swatch" style="background:#f5f3ff;border-color:#7c3aed"></span> Guardrail</span>
+      <span><span class="swatch" style="background:#fffbeb;border-color:#b45309"></span> Decision</span>
+      <span><span class="swatch" style="background:#f0fdf4;border-color:#15803d"></span> Output</span>
+    </div>
+
+    <div class="flow">
+      <div class="fnode entry"><span class="t">① ask_loop</span> <span class="s">— <code>main.py</code>: read question, hold <code>history</code> (last 6 turns), <code>reset</code> clears it</span></div>
+      <div class="fdown">↓ <span style="font-size:12px;color:#6b7280">question + history</span></div>
+
+      <div class="fnode proc"><span class="t">② answer()</span> <span class="s">— <code>generate.py</code>: orchestrates retrieve → augment → generate</span></div>
+      <div class="fdown">↓</div>
+
+      <div class="fnode proc"><span class="t">③ retrieve_multi()</span> <span class="s">— <code>retrieval.py</code>: is this ONE question or several?</span></div>
+      <div class="fdown">↓</div>
+      <div class="fnode llm"><span class="t">④ llm_decompose()</span> <span class="s">— gate splits a compound question into standalone sub-questions (Phase 8a)</span></div>
+
+      <div class="decision">Compound? &nbsp;→ route EACH sub &nbsp;|&nbsp; Simple? &nbsp;→ one plan</div>
+      <div class="fnote">both branches run the SAME routing below, per (sub-)question</div>
+      <div class="fdown">↓</div>
+
+      <div class="fnode llm"><span class="t">⑤ llm_route()</span> <span class="s">— gate reads the question + known vocab → JSON <code>{route, field, value}</code></span></div>
+      <div class="fdown">↓</div>
+      <div class="fnode guard"><span class="t">⑥ resolve_value() — the guardrail</span> <span class="s">snap proposed value to a REAL stored value (exact, else <code>difflib</code> fuzzy ≥ 0.6). Can't snap → plan rejected</span></div>
+      <div class="fdown">↓ <span style="font-size:12px;color:#6b7280">valid plan? else fall back → <code>detect_filter()</code> (rule-based) → semantic</span></div>
+
+      <div class="decision">③ route the plan → <code>_execute_plan()</code></div>
+      <div class="branch">
+        <div>
+          <div class="blabel">route = metadata</div>
+          <div class="fnode proc"><span class="t">store.get(where=…)</span><span class="s">exact filter → list the people</span></div>
+        </div>
+        <div>
+          <div class="blabel">route = aggregate</div>
+          <div class="fnode proc"><span class="t">len(docs)</span><span class="s">Python owns the COUNT (LLM can't count) — Phase 7</span></div>
+        </div>
+        <div>
+          <div class="blabel">route = semantic</div>
+          <div class="fnode proc"><span class="t">similarity_search(k)</span><span class="s">top-k nearest vectors</span></div>
+        </div>
+      </div>
+      <div class="fdown">↓ <span style="font-size:12px;color:#6b7280">docs + plan</span></div>
+
+      <div class="fnode proc"><span class="t">⑦ build_messages()</span> <span class="s">— augment: <code>[system rules] + history + [cards + question]</code> (Phase 8b threads history here)</span></div>
+      <div class="fdown">↓</div>
+      <div class="fnode llm"><span class="t">⑧ get_llm().invoke()</span> <span class="s">— gate READS the cards and writes a grounded answer (aggregate path uses <code>_answer_count</code>: LLM only phrases Python's number)</span></div>
+      <div class="fdown">↓</div>
+
+      <div class="fnode guard"><span class="t">⑨ _cited_sources()</span> <span class="s">keep only people the answer actually named; refusal/"don't know" → cite nothing (Phase 4.6)</span></div>
+      <div class="fdown">↓ <span style="font-size:12px;color:#6b7280">compound only</span></div>
+      <div class="fnode proc"><span class="t">⑩ _stitch()</span> <span class="s">combine already-correct sub-answers into ONE warm reply — adds no facts, recomputes no count (Phase 8a)</span></div>
+      <div class="fdown">↓</div>
+
+      <div class="fnode out"><span class="t">⑪ {answer, sources}</span> <span class="s">→ printed by CLI / rendered by Streamlit; turn appended to <code>history</code></span></div>
+    </div>
+
+    <div class="callout">
+      <b>Why the guardrail (⑥) is the crux</b>
+      The LLM is great at <i>reading intent</i> ("Reyen" ≈ "Reyan") but can <i>hallucinate</i> a value
+      that isn't in the data ("Vignesh" → a person who doesn't exist), which would filter to zero rows or
+      fabricate a count. <code>resolve_value()</code> forces every proposed value back onto real stored
+      data before any query runs — the LLM proposes, Python disposes.
+    </div>
+  </section>
+
+  <!-- ======================= 3 · PHASE BY PHASE ======================= -->
+  <section id="phases">
+    <h2>3 · Phase-by-phase — what was built &amp; learned</h2>
+    <p>The project grew one phase at a time. Each card: the <b>functionality</b> added, the <b>file/function</b>
+      it lives in, and the <b>one key learning</b>. Teal = a phase I built; purple = a question I chased down.</p>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#ccfbf1;border-color:#0f766e"></span> Built a phase</span>
+      <span><span class="swatch" style="background:#f3e8ff;border-color:#7c3aed"></span> Chased a question</span>
+    </div>
+
+    <div class="timeline">
+
+      <div class="pcard">
+        <div class="badge"><span class="n">0</span><span class="k">Setup</span></div>
+        <div class="body">
+          <div class="h">Environment &amp; the local gate</div>
+          <div class="fn">scripts/check_gate.sh · certs/ · offline HF flags</div>
+          <div class="learn"><b>Learning:</b> a port can be open but not serving — verify the gate with real inference before debugging anything. Corporate SSL proxy means the embedding model must load fully <i>offline</i>.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">1</span><span class="k">Data</span></div>
+        <div class="body">
+          <div class="h">Excel → Documents</div>
+          <div class="fn">data.py · load_employee_documents(), row_to_card()</div>
+          <div class="learn"><b>Learning:</b> embed a natural <i>sentence</i> (a "card"), not key-value text — models were trained on prose. Keep <code>metadata</code> separate for exact filtering. Fill blanks with <code>"Unassigned"</code>.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">2</span><span class="k">Index</span></div>
+        <div class="body">
+          <div class="h">Embeddings &amp; the vector store</div>
+          <div class="fn">index.py · build_index(), get_store() · Chroma + MiniLM</div>
+          <div class="learn"><b>Learning:</b> the question must be embedded with the <i>same</i> model as the cards, or similarity is meaningless. Persist once to <code>./chroma_db</code>; upsert by name so re-runs don't duplicate.</div>
+        </div>
+      </div>
+
+      <div class="pcard ask">
+        <div class="badge"><span class="n">2·Q</span><span class="k">Asked</span></div>
+        <div class="body">
+          <div class="h">Why semantic-only wasn't enough</div>
+          <div class="fn">learnings §1–2 · distance vs relevance scores</div>
+          <div class="learn"><b>Learning:</b> pure similarity is fuzzy and capped at <code>k</code> — it can't do "list ALL on MPLS" or "who reports to X". That gap is exactly what motivated hybrid retrieval.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">3</span><span class="k">Retrieve</span></div>
+        <div class="body">
+          <div class="h">Hybrid routing (metadata vs semantic)</div>
+          <div class="fn">retrieval.py · detect_filter() → then llm_route() (3.5)</div>
+          <div class="learn"><b>Learning:</b> because the data is small &amp; categorical, "does the question mention a known value?" is enough to choose an exact filter. <b>3.5:</b> an LLM router handles typos/partials — but its value must be validated (<code>resolve_value</code>).</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">4</span><span class="k">Generate</span></div>
+        <div class="body">
+          <div class="h">The RAG loop completes</div>
+          <div class="fn">generate.py · answer(), build_messages(), get_llm()</div>
+          <div class="learn"><b>Learning:</b> <i>augmentation</i> = stuffing retrieved cards into the prompt. The single most important rule is the anti-hallucination <b>grounding</b>: answer only from the cards, else say "I don't know".</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">4.5</span><span class="k">Tone</span></div>
+        <div class="body">
+          <div class="h">Friendlier answers + honest sources</div>
+          <div class="fn">generate.py · SYSTEM_PROMPT, _cited_sources() (4.6)</div>
+          <div class="learn"><b>Learning:</b> warmth must not loosen grounding. <b>4.6:</b> retrieval always returns <code>k</code> cards, so a "don't know" answer was citing unrelated names — cite only people the answer actually names.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">5</span><span class="k">CLI</span></div>
+        <div class="body">
+          <div class="h">One front door</div>
+          <div class="fn">main.py · ask_loop() · open store once, fail gracefully</div>
+          <div class="learn"><b>Learning:</b> separate the ENGINE (<code>answer()</code>) from the UX. The CLI opens the store once, hides debug noise, and handles Ctrl-C / gate-down without a stack trace.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">6</span><span class="k">Web UI</span></div>
+        <div class="body">
+          <div class="h">Streamlit front-end</div>
+          <div class="fn">app.py · @st.cache_resource, st.form</div>
+          <div class="learn"><b>Learning:</b> Streamlit reruns the whole script on every interaction — cache the slow store load, and batch input with a form. Same engine, new face: every earlier fix carries over for free.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">7</span><span class="k">Count</span></div>
+        <div class="body">
+          <div class="h">Aggregation — the third route</div>
+          <div class="fn">retrieval.py · aggregate route · plan["count"] = len(docs)</div>
+          <div class="learn"><b>Learning:</b> LLMs are unreliable at counting. Make it a <i>computation</i>, not a generation: Python owns the number (<code>len</code>), the LLM only phrases it. Hard-guard the "count everyone" escape hatch.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">8a</span><span class="k">Decompose</span></div>
+        <div class="body">
+          <div class="h">Multi-entity (compound) questions</div>
+          <div class="fn">retrieval.py · llm_decompose(), retrieve_multi() → generate._stitch()</div>
+          <div class="learn"><b>Learning:</b> one router returns one plan, so compound questions lost a half. Split into standalone sub-questions, route each through the same guardrail, then stitch the correct parts into one reply.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">8a′</span><span class="k">Granularity</span></div>
+        <div class="body">
+          <div class="h">Answer only what was asked</div>
+          <div class="fn">generate.py · SYSTEM_PROMPT granularity rules</div>
+          <div class="learn"><b>Learning:</b> a one-field question ("who is X's manager?") should return one field, not the whole card. This is a <i>presentation</i> fix (prompt), unlike counting which was a computation fix.</div>
+        </div>
+      </div>
+
+      <div class="pcard">
+        <div class="badge"><span class="n">8b</span><span class="k">Memory</span></div>
+        <div class="body">
+          <div class="h">Conversational memory (in-session)</div>
+          <div class="fn">main.py · history list · generate.build_messages(history=…)</div>
+          <div class="learn"><b>Learning:</b> memory has TWO jobs — <b>generation memory</b> (done: the LLM sees prior turns, so "whom am I?" works) and <b>retrieval memory</b> (not yet: routing still uses the raw question → query rewriting is next).</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="callout">
+      <b>The through-line</b>
+      Every phase is the same pattern: <b>find a real failure in the playground → understand why →
+      fix it at the right layer</b> (retrieval, computation, prompt, or UX). Counting was a computation
+      bug; over-answering was a prompt bug; forgetting was a state bug. Same "wrong output" symptom,
+      different cure each time.
+    </div>
+  </section>
+
+  <footer>
+    Employee RAG · architecture diagrams · companion to
+    <a href="learnings.html">My Learnings</a>
+  </footer>
+
+  </div><!-- /.content -->
+</div><!-- /.page -->
+</body>
+</html>
