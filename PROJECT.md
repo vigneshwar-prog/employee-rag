@@ -198,7 +198,8 @@ Copy the file to: `data/employees.xlsx`
 - Phase 7 — Aggregation route (count/how-many): ✅ Done (learner-found bug)
 - Phase 8a — Query decomposition (multi-entity questions): ✅ Done (learner-found bug)
 - Phase 8b — Conversational memory (in-session history, CLI): ✅ Done (learner-found gap)
-- Phase 8 — Experiments & polish: ⏳ Pending  ← next
+- Phase 9 — Schema-agnostic RAG (infer any sheet; range route + generalized aggregate): ✅ Done (learner's idea)
+- Phase 8 — Experiments & polish: ⏳ Pending  ← next (query rewriting, BM25 8c planned)
 
 Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
 
@@ -333,6 +334,38 @@ Legend: ✅ Done · 🔄 In Progress · ⏳ Pending
   stateless-unchanged. Docs: learnings §15. **Lesson: memory has two jobs — the LLM seeing history
   (done) vs. retrieval following references (query rewriting, next); and a grounding prompt must be told
   history is a trusted source.** **Next:** Phase 8 — experiments & polish (incl. query rewriting).
+- **2026-07-29 — Session 11 (Phase 9 — Schema-agnostic RAG ✅):**
+  Learner's ask: "let the user give ANY Excel (dob, salary, grade, notes, mentor…) and the RAG still
+  works if I change the data." Problem: the domain was hardcoded in 3 places — `data.py` (4 named cols),
+  `retrieval.py` (`FILTERABLE_FIELDS` + hand-written `FIELD_CUES` + fixed known-values), and the implicit
+  "identity == name". Fix: infer the schema at load time and drive everything from it.
+  **New module `src/schema.py`:** classifies each column into one of five ROLES — identity / categorical /
+  numeric / date / freetext — using tunable thresholds (`CATEGORICAL_MAX_DISTINCT=40`, ratio 0.5,
+  `PARSE_SUCCESS_RATIO=0.8`). Order matters: numeric before date (so 20000 isn't a timestamp), regex
+  pre-filter so names aren't parsed as dates. `SchemaProfile` persists to `chroma_db/schema.json` (query
+  process is separate from indexing). **`data.py`:** generic `row_to_card()` (prose from whatever columns
+  exist, freetext appended) + generic scalar metadata (numeric→float, date→**epoch float** so Chroma
+  `$gt`/`$lt` works, categorical→string); `load_employee_documents()` now returns `(docs, schema)`.
+  **`index.py`:** persists + reloads the schema (`get_schema()`). **`retrieval.py` (the big one):**
+  known-values + router PROMPT generated from the schema; **NEW `range` route**
+  (`{route,field,op,value[,value2]}` via Chroma `$gt`/`$lt`); aggregate generalized count → avg/min/max/sum
+  (Python owns the math); the `resolve_value` fuzzy-snap guardrail kept, plus numeric/date thresholds must
+  parse or fall back to semantic; a generic (cue-free) rule-based fallback for when the gate is down.
+  **`generate.py`:** `_answer_count` → `_answer_aggregate` (phrases avg/min/max/sum). **CLI + Streamlit:**
+  show the DETECTED schema on startup; Streamlit gets a **file-uploader → reindex → chat** (the headline
+  "it's dynamic" demo). Verified end-to-end: original sheet unchanged (reports-to → 22, total → 97,
+  semantic + memory intact); a synthetic {salary, joining date, notes} sheet correctly routes "earns more
+  than 2M" (range→3), "avg salary of M2" (aggregate→2,000,000), "joined after 2022" (date range→2),
+  "highest salary" (max→3,000,000). Docs: learnings §16. **Lesson: to make a hybrid RAG schema-agnostic,
+  the SEMANTIC half is already generic — the work is the metadata half: infer column roles from the data,
+  persist the profile, and GENERATE the router prompt/known-values/routes from it so they can't drift.
+  Chroma's scalar-only metadata is why dates become epoch floats.** **Next:** query rewriting
+  (follow-up-aware retrieval) / Phase 8c BM25 (planned).
+- **2026-08-21 — Session 12 (root entrypoint fix):** User tried `python3 main.py` from the repository
+  root and hit `[Errno 2] No such file or directory` because the real CLI lived at `src/main.py` only.
+  Added a tiny root-level launcher `main.py` that inserts `src/` on `sys.path` and delegates to the
+  existing CLI, so `python main.py` and `python src/main.py` both work. Verified with the project
+  virtualenv: `./.venv/bin/python main.py --help` and a full startup/quit cycle both succeed.
 
 ---
 

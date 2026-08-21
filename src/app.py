@@ -28,7 +28,8 @@ if str(SRC_DIR) not in sys.path:
 
 import streamlit as st
 
-from index import get_store
+from index import get_store, get_schema, build_index
+from data import EXCEL_PATH
 from generate import answer
 
 
@@ -42,14 +43,44 @@ def load_store():
     return get_store()
 
 
+def _sidebar_upload() -> None:
+    """Phase 9 headline demo: drop ANY .xlsx -> infer schema -> rebuild index -> chat.
+
+    We overwrite the data file, rebuild the persistent Chroma store, then clear the
+    cached store so the next rerun opens the freshly-built index. Schema inference
+    means we don't care what columns the uploaded sheet has.
+    """
+    with st.sidebar:
+        st.header("📤 Use your own sheet")
+        st.caption("Upload any Excel of records — any columns. The system infers the "
+                   "schema and rebuilds the index.")
+        uploaded = st.file_uploader("Excel (.xlsx)", type=["xlsx"])
+        if uploaded is not None and st.button("Build index from this file"):
+            EXCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            EXCEL_PATH.write_bytes(uploaded.getbuffer())
+            with st.spinner("Inferring schema & rebuilding the index…"):
+                build_index()
+            load_store.clear()   # drop the cached (stale) store
+            st.success("Index rebuilt from your file. Ask away!")
+            st.rerun()
+
+        schema = get_schema()
+        if schema:
+            st.subheader("Detected schema")
+            st.code(schema.describe(), language="text")
+
+
 def main() -> None:
     st.set_page_config(page_title="Employee RAG", page_icon="🧑‍💼")
 
     st.title("🧑‍💼 Employee RAG")
     st.caption(
         "Ask natural-language questions about the team. "
-        "The engine routes each question to an exact metadata filter or a semantic search."
+        "The engine routes each question to an exact metadata filter, a numeric/date "
+        "range, an aggregate, or a semantic search."
     )
+
+    _sidebar_upload()
 
     store = load_store()
 

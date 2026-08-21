@@ -18,6 +18,8 @@ Run it to ask questions and get real answers:
     python src/generate.py
 """
 
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
 from retrieval import retrieve_multi
@@ -72,9 +74,11 @@ Rules:
   it as "not found" — do NOT list or recite the other records, and never imply they
   are the only employees that exist.
 - If NEITHER the records NOR the earlier conversation contains the answer, do not
-  guess. Instead, say politely that you don't have that information in the team
-  data, and offer a helpful next step (e.g. suggest searching by manager / project
-  / technology). Do NOT make up an answer from general knowledge.
+  guess. Instead, respond in a natural, friendly way such as: "I can’t answer
+  that from this employee dataset" or "This dataset only includes employee
+  information like manager, project, and technology." Then offer a helpful next
+  step (e.g. suggest searching by manager / project / technology). Do NOT make
+  up an answer from general knowledge.
 - Only suggest re-checking the spelling when you found NO matching record. If a
   record DOES match (even via a close/fuzzy name), just answer confidently — do
   NOT tack on a "if you meant someone else, check the spelling" caveat, as it
@@ -91,6 +95,26 @@ Rules:
 - When listing people who match the question, list every matching person."""
 
 
+FOLLOWUP_REWRITE_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You rewrite a follow-up question into a SELF-CONTAINED question for an "
+        "employee lookup tool.\n"
+        "Rules:\n"
+        "- Use the conversation history to resolve pronouns and missing context.\n"
+        "- Preserve the user's intent exactly; do not add new facts.\n"
+        "- If the latest question is already standalone, return it unchanged.\n"
+        "- If the latest question is vague but refers to the previous result, make it "
+        "concrete in the most useful records-based way. For example, after a count "
+        "answer, 'give me the break up' should usually become a list/details question "
+        "about the same matching employees rather than inventing a new grouping.\n"
+        "- Output ONLY the rewritten question, no explanation."
+    ),
+    MessagesPlaceholder("history"),
+    ("human", "Latest user question: {question}"),
+])
+
+
 def format_cards(docs) -> str:
     """Turn retrieved Documents into a numbered block of text for the prompt.
 
@@ -103,6 +127,24 @@ def format_cards(docs) -> str:
     for i, d in enumerate(docs, start=1):
         lines.append(f"{i}. {d.page_content}")
     return "\n".join(lines)
+
+
+def rewrite_followup_question(question: str, history=None) -> str:
+    """Rewrite an ambiguous follow-up into a standalone query using LangChain
+    chat history. If rewriting fails, fall back to the original question.
+    """
+    if not history:
+        return question
+    try:
+        llm = get_llm()
+        messages = FOLLOWUP_REWRITE_PROMPT.format_messages(
+            history=history,
+            question=question,
+        )
+        rewritten = llm.invoke(messages).content.strip()
+    except Exception:
+        return question
+    return rewritten or question
 
 
 def build_messages(question: str, docs, history=None) -> list:
@@ -123,9 +165,9 @@ def build_messages(question: str, docs, history=None) -> list:
         f"Answer using only the records above."
     )
     return [
-        ("system", SYSTEM_PROMPT),
+        SystemMessage(content=SYSTEM_PROMPT),
         *(history or []),
-        ("human", user_prompt),
+        HumanMessage(content=user_prompt),
     ]
 
 
@@ -160,24 +202,42 @@ def _cited_sources(answer_text: str, docs) -> list[str]:
     return cited
 
 
-def _answer_count(question: str, plan: dict) -> str:
-    """Phrase a COUNT answer. Python already computed the number (plan['count']);
-    the LLM only wraps it in a friendly sentence — it must NOT recompute it.
+def _answer_aggregate(question: str, plan: dict) -> str:
+    """Phrase an AGGREGATE answer (count / avg / min / max / sum). Python already
+    computed the number; the LLM only wraps it in a friendly sentence — it must NOT
+    recompute it.
 
-    This is the heart of Phase 7: the model is bad at counting (that was the bug),
+    This is the heart of Phase 7 (generalized in Phase 9): the model is bad at math,
     so Python owns the number and we hand it over as a fact to be restated verbatim.
     """
-    count = plan["count"]
-    field, value = plan.get("field"), plan.get("value")
-    scope = f"{field} = {value}" if field else "the whole team"
+    agg = plan.get("agg", "count")
+    if agg == "count":
+        number = plan["count"]
+        field, value = plan.get("field"), plan.get("value")
+        scope = f"{field} = {value}" if field else "the whole team"
+        what = "count"
+    else:
+        number = plan.get("agg_value")
+        field = plan.get("field")
+        sf, sv = plan.get("scope_field"), plan.get("scope_value")
+        scope = f"{sf} = {sv}" if sf else "the whole team"
+        what = f"{agg} of {field}"
     system = (
-        "You state a precomputed count in one warm, concise sentence.\n"
-        f"The exact count is {count}. Use this number EXACTLY — do not change or recompute it.\n"
-        "Do not list names (you weren't given any). You may offer to list them or break it down."
+        "You state a precomputed statistic in one warm, concise sentence.\n"
+        f"The exact {what} is {number}. Use this number EXACTLY — do not change or "
+        "recompute it.\n"
+        "Do not list names because you were not given any.\n"
+        "Do not invent unsupported dimensions such as level, location, department, "
+        "or seniority. If you offer a follow-up, keep it generic and safe, such as "
+        "offering to list the matching employees or show the matching records."
     )
-    human = f"Question: {question}\nScope: {scope}\nExact count: {count}"
+    human = f"Question: {question}\nScope: {scope}\nExact {what}: {number}"
     llm = get_llm()
     return llm.invoke([("system", system), ("human", human)]).content
+
+
+# Backwards-compatible alias (older name).
+_answer_count = _answer_aggregate
 
 
 def _answer_one(sub: dict, store, history=None) -> tuple[str, list[str]]:
@@ -189,7 +249,7 @@ def _answer_one(sub: dict, store, history=None) -> tuple[str, list[str]]:
     plan, docs = sub["plan"], sub["docs"]
     question = plan.get("question", "")
     if plan.get("route") == "aggregate":
-        return _answer_count(question, plan), []
+        return _answer_aggregate(question, plan), []
     messages = build_messages(question, docs, history=history)
     response = get_llm().invoke(messages)
     return response.content, _cited_sources(response.content, docs)
@@ -225,14 +285,18 @@ def answer(question: str, store=None, k: int = 4, debug: bool = True, history=No
     history steers GENERATION, not RETRIEVAL — the router still routes on the raw
     question; follow-up-aware retrieval is a later 'query rewriting' step.)
     """
-    subs = retrieve_multi(question, store=store, k=k, debug=debug)
+    standalone_question = rewrite_followup_question(question, history=history)
+    if debug and standalone_question != question:
+        print(f"  [memory] Rewrote follow-up -> {standalone_question}")
+
+    subs = retrieve_multi(standalone_question, store=store, k=k, debug=debug)
 
     # --- Single-question path: identical behavior to before Phase 8a. ---
     if len(subs) == 1:
         plan, docs = subs[0]["plan"], subs[0]["docs"]
         # AGGREGATE route: Python counted; LLM just phrases the number (no history needed).
         if plan.get("route") == "aggregate":
-            return {"answer": _answer_count(question, plan), "sources": []}
+            return {"answer": _answer_aggregate(question, plan), "sources": []}
         # AUGMENT + GENERATE (metadata / semantic routes).
         messages = build_messages(question, docs, history=history)
         response = get_llm().invoke(messages)

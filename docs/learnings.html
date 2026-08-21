@@ -165,6 +165,7 @@
         <a href="#agg">13 · Counting (aggregation)</a>
         <a href="#decomp">14 · Query decomposition</a>
         <a href="#memory">15 · Conversational memory</a>
+        <a href="#schema">16 · Schema-agnostic RAG</a>
       </nav>
     </div>
 
@@ -196,7 +197,7 @@
     <p><em>Living document — updated at the end of each phase.</em> Sections are tagged
       <span class="cat cat-build" style="margin:0">Built</span> (a phase I implemented) or
       <span class="cat cat-ask" style="margin:0">Asked</span> (a question I chased down and you explained).</p>
-    <p class="status"><b>Last updated:</b> after Phase 8b (conversational memory — in-session history, CLI) · <b>Status:</b> Phases 0–7 + 8a + 8b done (+ router 3.5, friendly 4.5, relevance 4.6). Next: Phase 8 = experiments/polish (phonetic names, group-by counts, query rewriting, comparisons).</p>
+    <p class="status"><b>Last updated:</b> after Phase 9 (schema-agnostic RAG — any spreadsheet, inferred at load time; new range route + generalized aggregate) · <b>Status:</b> Phases 0–7 + 8a + 8b + 9 done (+ router 3.5, friendly 4.5, relevance 4.6). Next: query rewriting (follow-up-aware retrieval) / Phase 8c BM25 (planned).</p>
   </header>
 
   <!-- 1 -->
@@ -902,7 +903,165 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
     </div>
   </section>
 
-  <!-- Glossary -->
+  <!-- 16 -->
+  <section id="schema">
+    <span class="cat cat-build">Built</span><span class="phase-tag">Phase 9 · Built</span>
+    <h2>16 · Schema-agnostic RAG (any spreadsheet, inferred)</h2>
+    <p>Until now the domain was <b>hardcoded</b>: exactly four columns
+      (name/manager/project/technology) were baked into <code>data.py</code> and
+      <code>retrieval.py</code>. Accurate, but brittle — drop in a sheet with
+      <code>{dob, salary, grade, mentor, notes}</code> and it breaks. Phase 9 makes it
+      work on <b>any</b> sheet by inferring the schema from the data itself.</p>
+
+    <div class="callout">
+      <b>The idea</b>
+      Look at each column and DECIDE A ROLE from its values. Everything downstream —
+      the embedded card, the metadata dict, the router's known-values, the router
+      prompt — is then GENERATED from that inferred schema, so it can never drift out
+      of sync with the data.
+    </div>
+
+    <h3>The five roles (each → a retrieval strategy)</h3>
+    <table>
+      <tr><th>Role</th><th>Detected when…</th><th>Used for</th></tr>
+      <tr><td><b>identity</b></td><td>first all-unique text column</td><td>the row label we cite</td></tr>
+      <tr><td><b>categorical</b></td><td>few distinct text values (≤40 &amp; distinct/rows &lt; 0.5)</td><td>exact metadata filter + count</td></tr>
+      <tr><td><b>numeric</b></td><td>most cells parse as numbers</td><td><b>range</b> filter + avg/min/max/sum</td></tr>
+      <tr><td><b>date</b></td><td>most cells parse as dates</td><td>date-range filter</td></tr>
+      <tr><td><b>freetext</b></td><td>high-cardinality prose</td><td>semantic only (embedded)</td></tr>
+    </table>
+
+    <p><b>Order matters</b> in classification: numeric BEFORE date (so <code>20000</code>
+      isn't read as a timestamp), then identity, then categorical, then freetext. Date
+      detection has a regex pre-filter (<code>[/\-.]|\d{4}</code>) so it never tries to
+      parse names like "Ishan Sharma" as dates.</p>
+
+    <h3>The new <code>range</code> route</h3>
+    <p>The old router knew only metadata / semantic / aggregate(count). Phase 9 adds a
+      numeric/date comparison route, executed with Chroma's <code>$gt</code>/<code>$lt</code>:</p>
+    <pre>"who earns more than 2000000?"
+  -> {"route":"range","field":"Salary","op":">","value":2000000.0}
+  -> store.get(where={"Salary": {"$gt": 2000000.0}})        <span class="ok"># 3 matches</span>
+
+"who joined after 2022?"
+  -> {"route":"range","field":"Joining Date","op":">","value":<epoch>}   <span class="c"># dates stored as epoch float</span></pre>
+
+    <div class="callout pin">
+      <b>Chroma constraint that shaped the design</b>
+      Chroma metadata must be a SCALAR (str/int/float/bool). So dates can't be stored
+      as a datetime — we store them as an <b>epoch float</b>, which is exactly what makes
+      <code>$gt</code>/<code>$lt</code> date-range filters work. The router parses
+      "2022-01-01" to the same epoch before comparing.
+    </div>
+
+    <h3>Aggregate generalized: count → avg / min / max / sum</h3>
+    <pre>"average salary of the M2 team"
+  -> {"route":"aggregate","agg":"avg","field":"Salary",
+      "scope_field":"Manager","scope_value":"M2"}
+  -> Python computes it (never trust the LLM to do math)   <span class="ok"># 2,000,000</span></pre>
+
+    <div class="callout rec">
+      <b>The guardrail survived the rewrite</b>
+      Same philosophy as Phase 3.5: we NEVER trust the LLM's proposed value blindly.
+      Categoricals are fuzzy-snapped to a real stored value (<code>resolve_value</code>,
+      difflib cutoff 0.6); numeric/date thresholds must PARSE or we fall back to
+      semantic. The router now describes THIS sheet's columns + roles + values in its
+      prompt, so the LLM maps "who earns the most" → the numeric <code>Salary</code>
+      column with zero domain-specific code.
+    </div>
+
+    <div class="callout pin">
+      <b>Backwards compatibility = the safety net</b>
+      The original name/manager/project/technology sheet is just one instance of the
+      general case (3 categoricals + 1 identity, no numerics). All the old test
+      questions still pass: "who reports to Dhruv Sharma" → 22 matches, "how many in
+      total" → 97, semantic and memory unchanged. That regression suite is what let me
+      trust the rewrite.
+    </div>
+
+    <div class="callout idea">
+      <b>The headline demo</b>
+      Streamlit now has a file-uploader: drop ANY <code>.xlsx</code> → infer schema →
+      rebuild the index → chat. Both CLI and web show the DETECTED schema on startup, so
+      you SEE what the system understood ("Salary → numeric, Grade → categorical: A/B/C,
+      Notes → freetext"). That's the "it's dynamic" moment.
+    </div>
+  </section>
+
+  <section id="interview-qa">
+    <span class="cat cat-ask">Asked</span><span class="phase-tag">Interview prep · Q&amp;A</span>
+    <h2>Interview-ready questions and answers</h2>
+
+    <div class="qa">
+      <p class="q">Q: What were the main issues you had to fix to make the app run?</p>
+      <p class="a">A: The first problem was the entrypoint. The app code existed in <code>src/</code>, but the project root did not expose a working launcher, so running the app from the repo root failed. I also had to verify the gate at <code>http://localhost:8080</code> and rebuild the local Chroma vector store when the data was stale or masked. The fix was to add a clean root launcher, confirm the local Claude gate, and reindex the real employee workbook from the restored source data.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: Why did you choose a hybrid retrieval system instead of pure semantic search?</p>
+      <p class="a">A: Because many employee questions are exact, categorical lookups such as “who reports to Dhruv Sharma?” or “how many are on MPLS?” Semantic similarity is good for fuzzy intent, but it cannot reliably return a complete exact set. The system combines metadata filtering with semantic search: metadata handles exact lists and counts, while semantic handles concept-based questions like “who keeps the network reliable?” That gives both correctness and flexibility.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: How did you implement conversational memory?</p>
+      <p class="a">A: I used LangChain’s <code>InMemoryChatMessageHistory</code> and kept a running history of the conversation. Each turn passed the prior messages into the generation prompt so follow-up questions like “what about his project?” could resolve pronouns using earlier context. I also added a follow-up rewrite step so vague references are converted into self-contained questions before retrieval. That keeps both memory and retrieval aligned.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: How do you handle questions that are not about employee data?</p>
+      <p class="a">A: The app uses a strict grounding rule: it answers only from the employee records and says it is limited to employee lookup questions when the request falls outside scope. It does not fallback to general knowledge or invent a person. That was important because a model that guesses can sound confident but is wrong. The friendly wording is a prompt-only change, while the correctness guardrail remains the same.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What did you do when the employee data was masked or stale?</p>
+      <p class="a">A: I restored the original employee workbook, checked the source file under the project’s data folder, and rebuilt the Chroma index. In practice, changing the Excel file alone is not enough; the vector store must be recreated so the embeddings and metadata match the real data. That was a concrete data integrity fix and a good reminder that the persisted index is separate from the source spreadsheet.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What is the most important design lesson from this project?</p>
+      <p class="a">A: The key lesson is that retrieval and generation should be separated clearly. The router decides which search path to use, Python executes the exact logic, and the LLM only formats or explains the result. This makes the system more reliable: the count comes from Python, the exact employee match comes from metadata filters, and the model never has to “guess” its way through a fact it should not invent.</p>
+    </div>
+  </section>
+
+  <section id="chunking-strategies">
+    <span class="cat cat-ask">Asked</span><span class="phase-tag">Chunking strategy · Real-world cases</span>
+    <h2>Chunking strategies by document type</h2>
+
+    <div class="callout rec">
+      <b>The rule I learned</b>
+      The best chunking strategy is the one that matches the natural unit of meaning in the data. If each row is a complete entity, chunk by row. If each policy is a rule, chunk by policy section. If each FAQ is a Q&amp;A, chunk by Q&amp;A. A random token size is only a fallback, not a design choice.
+    </div>
+
+    <table>
+      <tr><th>Document type</th><th>Best chunking unit</th><th>Metadata to add</th><th>Best retrieval</th></tr>
+      <tr><td>HR policy documents</td><td>one policy section or rule</td><td>department, policy_type, effective_date, region</td><td>metadata filter + semantic</td></tr>
+      <tr><td>FAQs</td><td>one Q&amp;A pair</td><td>category, product, audience, version</td><td>semantic + metadata tags</td></tr>
+      <tr><td>Troubleshooting guide</td><td>one issue / symptom / fix block</td><td>service, error_type, environment, version</td><td>semantic + metadata</td></tr>
+      <tr><td>Whole code repository docs</td><td>one module / service / feature section</td><td>repo, module, language, component</td><td>hybrid retrieval</td></tr>
+      <tr><td>Error findings and learnings</td><td>one incident / RCA record</td><td>service, severity, root_cause, date</td><td>semantic + metadata</td></tr>
+    </table>
+
+    <div class="qa">
+      <p class="q">Q: Why is row-level chunking so good for this project?</p>
+      <p class="a">A: Because each employee record already represents a complete knowledge unit: identity, manager, project, technology, plus optional free-text notes. Splitting a person into fixed-size chunks destroys that atomic meaning. A row-level chunk is also easier to filter exactly by manager or project, which is why the hybrid design in this app works well.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: When would fixed-size chunks be a better choice?</p>
+      <p class="a">A: Fixed-size chunking is useful mainly for long narrative documents such as reports, tutorials, or research notes where there is no obvious logical unit. Even then, section-based chunking is usually better because it preserves context. Fixed-size chunks are a practical fallback, not the ideal strategy for structured datasets.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What is the trade-off between semantic and metadata-heavy retrieval?</p>
+      <p class="a">A: Semantic search is great for fuzzy or natural-language questions like “who handles automation?” but weak for exact complete-set queries like “list everyone under Dhruv Sharma.” Metadata is exact and complete, but it needs the right field/value. That is why the best system is hybrid: semantic handles meaning, metadata handles exactness.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What is the simplest decision rule I can reuse elsewhere?</p>
+      <p class="a">A: If the content is already a self-contained unit, keep it as one chunk. If it is long and structured, chunk by section or module. If it is short-form Q&amp;A, use one Q&amp;A pair per chunk. If it is a record-based dataset, keep one record per chunk and attach metadata. That rule usually beats arbitrary token-size chunking.</p>
+    </div>
+  </section>
+
   <section id="glossary">
     <h2>Quick glossary (for fast revision)</h2>
     <ul class="tight">

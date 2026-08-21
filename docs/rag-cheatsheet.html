@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root{
+  --bg:#070b14;
+  --ink:#eaf0ff;
+  --mut:#8fa0c0;
+  --dim:#63738f;
+  --line:rgba(140,170,230,.16);
+  --glass:rgba(255,255,255,.045);
+  --c1:#5b9dff; /* sources/blue */
+  --c2:#22d3ee; /* ingest/cyan */
+  --c3:#34d399; /* chunk/green */
+  --c4:#a78bfa; /* embed/violet */
+  --c5:#f472b6; /* store/pink */
+  --c6:#fbbf24; /* retrieval/amber */
+  --c7:#fb7185; /* rerank/rose */
+  --c8:#818cf8; /* llm/indigo */
+  --ok:#2dd4a7;
+  --warn:#f59e0b;
+  --bad:#f43f5e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);}
+body{
+  width:2000px;height:2829px;
+  font-family:Inter,system-ui,sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  position:relative;overflow:hidden;
+}
+.bgfx{position:absolute;inset:0;z-index:0;
+  background:
+    radial-gradient(1100px 700px at 12% -4%, rgba(91,157,255,.20), transparent 60%),
+    radial-gradient(1000px 700px at 92% 6%, rgba(167,139,250,.16), transparent 60%),
+    radial-gradient(1200px 800px at 50% 102%, rgba(34,211,238,.12), transparent 62%),
+    linear-gradient(180deg,#070b14 0%,#080d18 55%,#060a12 100%);
+}
+.grid{position:absolute;inset:0;z-index:0;opacity:.30;
+  background-image:linear-gradient(rgba(140,175,235,.075) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(140,175,235,.075) 1px,transparent 1px);
+  background-size:50px 50px;
+  mask-image:radial-gradient(120% 90% at 50% 30%,#000 30%,transparent 100%);
+}
+.wrap{position:relative;z-index:2;padding:54px 58px 40px;}
+
+/* ---------- HEADER ---------- */
+header{display:flex;align-items:flex-start;justify-content:space-between;
+  border-bottom:2px solid var(--line);padding-bottom:26px;margin-bottom:30px;}
+.brand{display:flex;gap:24px;align-items:center}
+.logo{width:96px;height:96px;border-radius:24px;flex:0 0 auto;
+  background:linear-gradient(145deg,rgba(91,157,255,.30),rgba(167,139,250,.22));
+  border:1.5px solid rgba(150,190,255,.42);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 60px rgba(91,157,255,.28), inset 0 1px 0 rgba(255,255,255,.14)}
+h1{font-size:66px;font-weight:900;letter-spacing:-2.2px;line-height:1;
+  background:linear-gradient(96deg,#ffffff 0%,#bcd6ff 42%,#a78bfa 78%,#22d3ee 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin-top:12px;font-size:22.5px;color:var(--mut);font-weight:400;letter-spacing:.2px}
+.chips{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
+.chip{font-size:14.5px;font-weight:600;padding:6px 15px;border-radius:999px;
+  border:1px solid var(--line);background:var(--glass);color:#c6d6f5;letter-spacing:.4px}
+.meta{text-align:right;font-size:15px;color:var(--dim);line-height:2;
+  font-family:'JetBrains Mono',monospace}
+.meta b{color:#9fb6de;font-weight:600}
+.vtag{display:inline-block;margin-bottom:10px;font-size:13px;letter-spacing:3px;font-weight:800;
+  color:#22d3ee;border:1px solid rgba(34,211,238,.4);padding:6px 14px;border-radius:8px;
+  background:rgba(34,211,238,.08)}
+
+/* ---------- PRIMITIVES ---------- */
+.card{background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.018));
+  border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(14px);
+  box-shadow:0 14px 40px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.07);
+  position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--ac,#5b9dff),transparent 85%);opacity:.95}
+.sechead{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+.sechead .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;background:rgba(255,255,255,.06);border:1px solid var(--line);flex:0 0 auto}
+.sechead h2{font-size:25px;font-weight:800;letter-spacing:-.5px}
+.sechead .n{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--dim)}
+h3.blk{font-size:31px;font-weight:800;letter-spacing:-.7px;margin:0 0 20px;display:flex;
+  align-items:center;gap:14px}
+h3.blk::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+h3.blk .num{font-family:'JetBrains Mono',monospace;font-size:16px;color:#0a0f1a;background:var(--ac,#5b9dff);
+  padding:4px 11px;border-radius:7px;font-weight:800}
+.pill{display:inline-block;font-size:14.5px;font-weight:600;padding:5px 12px;border-radius:8px;
+  background:rgba(255,255,255,.055);border:1px solid var(--line);color:#cfdcf6;margin:0 6px 6px 0}
+.tiny{font-size:14px;color:var(--mut);line-height:1.62}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ---------- PIPELINE ---------- */
+.flowwrap{margin-bottom:34px}
+.flow{display:flex;align-items:stretch;gap:0}
+.stage{flex:1;min-width:0;position:relative;padding:0 4px}
+.sbox{height:100%;border-radius:16px;padding:16px 14px 15px;
+  background:linear-gradient(165deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  border:1px solid var(--line);backdrop-filter:blur(12px);
+  box-shadow:0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.07)}
+.sbox .top{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.sbox .dot{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--ac) 20%,transparent);border:1px solid color-mix(in srgb,var(--ac) 48%,transparent)}
+.sbox .st{font-size:11px;font-weight:800;letter-spacing:1.4px;color:var(--ac);font-family:'JetBrains Mono',monospace}
+.sbox h4{font-size:18.5px;font-weight:800;letter-spacing:-.35px;line-height:1.18;margin-bottom:9px}
+.sbox li{list-style:none;font-size:13.2px;color:#a9bbdb;line-height:1.55;padding-left:12px;position:relative}
+.sbox li::before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;
+  background:var(--ac);opacity:.85}
+.arrow{flex:0 0 26px;display:flex;align-items:center;justify-content:center;color:#40506e;font-size:22px}
+
+/* ---------- ARCH DIAGRAM ---------- */
+.arch{padding:26px 28px 24px}
+.tier{margin-bottom:16px}
+.tierlbl{font-size:12.5px;font-weight:800;letter-spacing:2.4px;color:var(--dim);
+  font-family:'JetBrains Mono',monospace;margin-bottom:10px;display:flex;align-items:center;gap:12px}
+.tierlbl::after{content:'';flex:1;height:1px;background:var(--line)}
+.row{display:flex;gap:12px}
+.node{flex:1;border-radius:13px;padding:13px 14px;background:rgba(255,255,255,.05);
+  border:1px solid var(--line);position:relative;min-width:0}
+.node.k{border-color:color-mix(in srgb,var(--ac) 42%,transparent);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--ac) 15%,transparent),rgba(255,255,255,.02));
+  box-shadow:0 0 26px color-mix(in srgb,var(--ac) 16%,transparent)}
+.node .nm{font-size:16.5px;font-weight:700;letter-spacing:-.25px;display:flex;align-items:center;gap:8px}
+.node .ds{font-size:12.6px;color:var(--dim);margin-top:5px;line-height:1.42;font-family:'JetBrains Mono',monospace}
+.conn{text-align:center;color:#3c4a66;font-size:17px;margin:2px 0 10px;letter-spacing:8px}
+
+/* ---------- LAYOUT ---------- */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+.pad{padding:22px 24px}
+.mb{margin-bottom:24px}
+
+/* ---------- LISTS ---------- */
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;
+  border-bottom:1px dashed rgba(140,170,230,.13);font-size:14.2px}
+.kv:last-child{border:0}
+.kv .k{color:#dbe6fb;font-weight:600}
+.kv .v{color:var(--mut);text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px}
+ul.li{list-style:none}
+ul.li li{font-size:14px;color:#a9bbdb;line-height:1.55;padding:5px 0 5px 20px;position:relative}
+ul.li li b{color:#e3ecff;font-weight:650}
+ul.li li::before{content:'▸';position:absolute;left:2px;top:5px;color:var(--ac);font-size:12px}
+ul.li.bad li::before{content:'✕';color:var(--bad);font-size:11px;top:6px}
+ul.li.good li::before{content:'✓';color:var(--ok);font-size:12px;top:5px}
+
+/* ---------- TABLE ---------- */
+table{width:100%;border-collapse:collapse;font-size:14.6px}
+th{text-align:left;font-size:12px;letter-spacing:2px;color:var(--dim);font-weight:800;
+  padding:0 14px 11px;font-family:'JetBrains Mono',monospace;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid rgba(140,170,230,.09);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.l{color:#93a7c8;font-weight:600;font-size:14px}
+td.p{font-weight:750;color:#fff}
+td.p .b{display:inline-block;padding:4px 11px;border-radius:7px;font-size:14px;
+  background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 38%,transparent);color:#7ff0d0}
+td.a{color:var(--mut);font-size:13.6px;font-family:'JetBrains Mono',monospace}
+td.w{color:#c8d6f0;font-size:13.6px}
+
+/* ---------- MISC ---------- */
+.bar{height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--ac),color-mix(in srgb,var(--ac) 45%,#fff))}
+.note{border-left:3px solid var(--ac);padding:10px 0 10px 14px;background:linear-gradient(90deg,color-mix(in srgb,var(--ac) 10%,transparent),transparent);
+  border-radius:0 10px 10px 0;font-size:13.8px;color:#b9c9e6;line-height:1.55;margin-top:14px}
+.note b{color:#fff}
+footer{margin-top:28px;padding-top:20px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--dim);
+  font-family:'JetBrains Mono',monospace}
+svg{display:block}
+.eq{font-family:'JetBrains Mono',monospace;font-size:13.2px;color:#8fe6d4;
+  background:rgba(45,212,167,.07);border:1px solid rgba(45,212,167,.2);border-radius:8px;
+  padding:7px 11px;margin-top:8px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="bgfx"></div><div class="grid"></div>
+<div class="wrap">
+
+<!-- ============ HEADER ============ -->
+<header>
+  <div class="brand">
+    <div class="logo">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#bcd6ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
+        <path d="M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/><circle cx="12" cy="11.5" r="1.4" fill="#22d3ee" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Production RAG Pipeline Cheat Sheet</h1>
+      <div class="sub">End-to-end reference architecture for Retrieval-Augmented Generation at scale — ingestion to grounded, cited answers.</div>
+      <div class="chips">
+        <span class="chip">ML Engineers</span><span class="chip">AI Architects</span>
+        <span class="chip">Platform / MLOps</span><span class="chip">Desk Reference</span>
+      </div>
+    </div>
+  </div>
+  <div class="meta">
+    <div class="vtag">v2026.08</div>
+    <div><b>FORMAT</b> · A2 Portrait / 4K+</div>
+    <div><b>SCOPE</b> · 14-stage lifecycle</div>
+    <div><b>LATENCY</b> · p95 target &lt; 2.5 s</div>
+  </div>
+</header>
+
+<!-- ============ 1. PIPELINE FLOW ============ -->
+<div class="flowwrap">
+  <h3 class="blk" style="--ac:var(--c1)"><span class="num">01</span> The Lifecycle — Left → Right Data Flow</h3>
+
+  <!-- ROW A -->
+  <div class="flow" style="margin-bottom:18px">
+    <div class="stage" style="--ac:var(--c1)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b9dff" stroke-width="2.2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><span class="st">S01</span></div>
+      <h4>Data Sources</h4>
+      <li>PDF · DOCX · HTML</li><li>Confluence · Notion</li><li>SQL · Data Lake</li><li>S3 · SharePoint</li><li>APIs · Tickets</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c2)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg></div><span class="st">S02</span></div>
+      <h4>Ingestion</h4>
+      <li>Batch + CDC streams</li><li>Kafka / Airflow DAG</li><li>Loaders &amp; OCR</li><li>Dedup by hash</li><li>Retry + DLQ</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c2)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.2"><path d="M4 7h16M4 12h11M4 17h7"/></svg></div><span class="st">S03</span></div>
+      <h4>Normalization</h4>
+      <li>→ Markdown / text</li><li>Strip boilerplate</li><li>Table &amp; layout parse</li><li>Unicode + language</li><li>PII redaction</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c3)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path d="M4 4h16v6H4zM4 14h9v6H4z"/></svg></div><span class="st">S04</span></div>
+      <h4>Metadata Gen</h4>
+      <li>source · url · doc_id</li><li>ACL / tenant tags</li><li>title · section path</li><li>timestamps · version</li><li>LLM summary+keywords</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c3)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path d="M3 5h18M3 12h18M3 19h18" stroke-dasharray="4 3"/></svg></div><span class="st">S05</span></div>
+      <h4>Chunking</h4>
+      <li><b style="color:#8ff0c8">Fixed</b> — n tokens</li><li><b style="color:#8ff0c8">Recursive</b> — ¶→sent</li><li><b style="color:#8ff0c8">Semantic</b> — embed Δ</li><li><b style="color:#8ff0c8">Sliding</b> — 10-20% ovl</li><li><b style="color:#8ff0c8">Parent-Child</b></li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c4)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2.2"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="9" r="2.4"/><circle cx="9" cy="18" r="2.4"/><path d="M8 7l8 1.5M8 8l1 8"/></svg></div><span class="st">S06</span></div>
+      <h4>Embeddings</h4>
+      <li>OpenAI 3-large/small</li><li>BGE-M3 · E5-mistral</li><li>Jina v3 · Voyage-3</li><li>Cohere embed v3</li><li>Matryoshka + int8</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c5)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2.2"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/></svg></div><span class="st">S07</span></div>
+      <h4>Vector Store</h4>
+      <li>Qdrant · Pinecone</li><li>Weaviate · Milvus</li><li>FAISS · pgvector</li><li>HNSW / IVF-PQ</li><li>Payload + hybrid idx</li></div></div>
+  </div>
+
+  <!-- ROW B -->
+  <div class="flow">
+    <div class="stage" style="--ac:var(--c6)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg></div><span class="st">S08</span></div>
+      <h4>Retrieval</h4>
+      <li>Dense (ANN kNN)</li><li>Sparse (BM25/SPLADE)</li><li><b style="color:#ffd77a">Hybrid</b> + metadata filter</li><li>MMR · Multi-Query</li><li>Parent / auto-merge</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c6)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2"><path d="M4 18V8m5 10V5m5 13v-7m5 7V9"/></svg></div><span class="st">S09</span></div>
+      <h4>Search Algos</h4>
+      <li>Cosine / dot / L2</li><li>BM25 (k1 1.2, b .75)</li><li>TF-IDF baseline</li><li>RRF fusion</li>
+      <div class="eq" style="font-size:11.4px;padding:5px 8px">RRF = Σ 1/(k + rank), k=60</div></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c7)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2.2"><path d="M6 4v16M6 4l6 4-6 4M18 20V4"/></svg></div><span class="st">S10</span></div>
+      <h4>Reranking</h4>
+      <li>BGE-reranker-v2-m3</li><li>Cohere Rerank 3.5</li><li>Cross-Encoder MiniLM</li><li>ColBERT late-interact</li><li>top-k 50 → top-n 5</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c8)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h6"/></svg></div><span class="st">S11</span></div>
+      <h4>Prompt Build</h4>
+      <li>System + guardrails</li><li>Numbered ctx blocks</li><li>Token budget &amp; trim</li><li>Few-shot + schema</li><li>"Cite or say unknown"</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c8)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg></div><span class="st">S12</span></div>
+      <h4>LLM Generation</h4>
+      <li>GPT · Claude · Gemini</li><li>Llama · Mistral</li><li>Qwen · DeepSeek</li><li>temp 0–0.3, stream</li><li>Router: cheap→strong</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--ok)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2dd4a7" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg></div><span class="st">S13</span></div>
+      <h4>Response</h4>
+      <li>Inline [1][2] citations</li><li>Confidence score</li><li>Groundedness check</li><li>Abstain if &lt; τ</li><li>Source deep-links</li></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" style="--ac:var(--c1)"><div class="sbox">
+      <div class="top"><div class="dot"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b9dff" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg></div><span class="st">S14</span></div>
+      <h4>Feedback Loop</h4>
+      <li>👍/👎 + edit capture</li><li>Hard-negative mining</li><li>Eval set refresh</li><li>Re-embed on drift</li><li>Retrain reranker</li></div></div>
+  </div>
+</div>
+
+<!-- ============ 2. ENTERPRISE ARCHITECTURE ============ -->
+<h3 class="blk" style="--ac:var(--c4)"><span class="num">02</span> Enterprise Reference Architecture</h3>
+<div class="card arch mb" style="--ac:var(--c4)">
+  <div class="tier">
+    <div class="tierlbl">EDGE / CONTROL PLANE</div>
+    <div class="row">
+      <div class="node k" style="--ac:var(--c1)"><div class="nm">🌐 API Gateway</div><div class="ds">REST/gRPC · rate-limit · WAF · quota</div></div>
+      <div class="node k" style="--ac:var(--c1)"><div class="nm">🔐 Auth / IdP</div><div class="ds">OAuth2 · OIDC · JWT · SSO · tenant claim</div></div>
+      <div class="node k" style="--ac:var(--c1)"><div class="nm">⚖️ Load Balancer</div><div class="ds">L7 · sticky-less · health · autoscale</div></div>
+      <div class="node" style="--ac:var(--c1)"><div class="nm">🔑 Secrets Manager</div><div class="ds">Vault / KMS · rotation · no keys in env</div></div>
+    </div>
+  </div>
+  <div class="conn">↓ ↓ ↓ ↓</div>
+  <div class="tier">
+    <div class="tierlbl">RAG SERVING PLANE</div>
+    <div class="row">
+      <div class="node k" style="--ac:var(--c6)"><div class="nm">🔍 Retriever Service</div><div class="ds">query rewrite · hybrid fan-out · RRF · ACL filter</div></div>
+      <div class="node k" style="--ac:var(--c7)"><div class="nm">🎯 Reranker</div><div class="ds">GPU pool · cross-encoder · batch · top-50→5</div></div>
+      <div class="node k" style="--ac:var(--c8)"><div class="nm">🧩 Prompt Builder</div><div class="ds">templates · token budget · injection scrub</div></div>
+      <div class="node k" style="--ac:var(--c8)"><div class="nm">🤖 LLM Gateway</div><div class="ds">multi-provider · fallback · stream · budget</div></div>
+    </div>
+  </div>
+  <div class="conn">↓ ↓ ↓ ↓</div>
+  <div class="tier">
+    <div class="tierlbl">DATA PLANE</div>
+    <div class="row">
+      <div class="node k" style="--ac:var(--c5)"><div class="nm">🗄️ Vector DB</div><div class="ds">HNSW · sharded · replicas · snapshots</div></div>
+      <div class="node" style="--ac:var(--c5)"><div class="nm">🧾 Metadata DB</div><div class="ds">Postgres · ACL · doc registry · versions</div></div>
+      <div class="node" style="--ac:var(--c7)"><div class="nm">⚡ Redis Cache</div><div class="ds">embed · retrieval · prompt · semantic TTL</div></div>
+      <div class="node" style="--ac:var(--c2)"><div class="nm">📨 Kafka</div><div class="ds">ingest topics · CDC · DLQ · replay</div></div>
+      <div class="node" style="--ac:var(--c2)"><div class="nm">🪣 Object Storage</div><div class="ds">S3/GCS · raw blobs · parsed · versioned</div></div>
+    </div>
+  </div>
+  <div class="conn">↓ ↓ ↓ ↓</div>
+  <div class="tier" style="margin-bottom:0">
+    <div class="tierlbl">OPERATIONS PLANE (cross-cutting)</div>
+    <div class="row">
+      <div class="node" style="--ac:var(--c3)"><div class="nm">📈 Monitoring</div><div class="ds">Prometheus · Grafana · SLO burn · alerts</div></div>
+      <div class="node" style="--ac:var(--c3)"><div class="nm">📝 Logging &amp; Trace</div><div class="ds">OTel spans · trace_id per query · audit</div></div>
+      <div class="node" style="--ac:var(--c3)"><div class="nm">🧪 Eval Harness</div><div class="ds">golden set · CI gate · nightly regression</div></div>
+      <div class="node" style="--ac:var(--c3)"><div class="nm">🛡️ Guardrails</div><div class="ds">PII · toxicity · injection · groundedness</div></div>
+    </div>
+  </div>
+  <div class="note" style="--ac:var(--c4)"><b>Golden path:</b> Client → Gateway → Auth (tenant + ACL claims) → Retriever (cache hit? → return) → Vector DB + Metadata DB (filtered ANN) → Reranker → Prompt Builder → LLM Gateway → guardrail + citation check → stream to client. Every hop emits an OTel span under one <span class="mono">trace_id</span>; ACL is enforced <b>at query time</b>, never post-filtered in the app.</div>
+</div>
+
+<!-- ============ 3. FOUR PILLARS ============ -->
+<h3 class="blk" style="--ac:var(--c6)"><span class="num">03</span> Cross-Cutting Concerns</h3>
+<div class="g4 mb">
+  <div class="card pad" style="--ac:var(--bad)">
+    <div class="sechead"><div class="ic">🛡️</div><h2>Security</h2></div>
+    <ul class="li">
+      <li><b>RBAC</b> — roles → index scopes; deny-by-default.</li>
+      <li><b>ACL filters</b> — embed <span class="mono">allowed_groups[]</span> in payload; filter <i>inside</i> the ANN query.</li>
+      <li><b>Prompt injection</b> — treat retrieved text as data; delimit, strip instructions, never let context trigger tools.</li>
+      <li><b>PII</b> — Presidio scrub pre-embed; tokenize; encrypt at rest + in transit.</li>
+      <li><b>Tenant isolation</b> — namespace or per-tenant collection.</li>
+      <li><b>Audit</b> — log query, docs served, user, timestamp.</li>
+    </ul>
+    <div class="note" style="--ac:var(--bad)"><b>Rule:</b> a vector store without ACL filtering is a data-leak waiting to be indexed.</div>
+  </div>
+
+  <div class="card pad" style="--ac:var(--c7)">
+    <div class="sechead"><div class="ic">⚡</div><h2>Caching</h2></div>
+    <div class="kv"><span class="k">Embedding cache</span><span class="v">hash(text)→vec · ∞ TTL</span></div>
+    <div class="kv"><span class="k">Retrieval cache</span><span class="v">hash(q+filters) · 5–60 m</span></div>
+    <div class="kv"><span class="k">Prompt cache</span><span class="v">provider-side prefix</span></div>
+    <div class="kv"><span class="k">Semantic cache</span><span class="v">cos ≥ 0.95 → reuse</span></div>
+    <div class="kv"><span class="k">Rerank cache</span><span class="v">(q, doc_id) pairs</span></div>
+    <ul class="li" style="margin-top:10px">
+      <li><b>Key on everything</b> that changes output: model, version, filters, tenant.</li>
+      <li><b>Invalidate</b> on re-index or doc version bump.</li>
+      <li>Target <b>30–60% hit rate</b>; it is the single cheapest latency + cost win.</li>
+    </ul>
+    <div class="eq">cost↓ ≈ hit_rate × (embed + LLM $)</div>
+  </div>
+
+  <div class="card pad" style="--ac:var(--c3)">
+    <div class="sechead"><div class="ic">🧪</div><h2>Evaluation</h2></div>
+    <div class="kv"><span class="k">Recall@K</span><span class="v">gold in top-K · &gt;0.90</span></div>
+    <div class="kv"><span class="k">Precision@K</span><span class="v">signal/noise · &gt;0.60</span></div>
+    <div class="kv"><span class="k">MRR</span><span class="v">1/rank first hit · &gt;0.75</span></div>
+    <div class="kv"><span class="k">NDCG@10</span><span class="v">graded rank · &gt;0.80</span></div>
+    <div class="kv"><span class="k">Faithfulness</span><span class="v">grounded claims · &gt;0.95</span></div>
+    <div class="kv"><span class="k">Hallucination</span><span class="v">unsupported · &lt;2%</span></div>
+    <div class="kv"><span class="k">Answer relevancy</span><span class="v">LLM judge · &gt;0.85</span></div>
+    <ul class="li" style="margin-top:10px">
+      <li>Split <b>retrieval eval</b> from <b>generation eval</b> — debug the right half.</li>
+      <li>150–300 golden Q/A, human-labeled; block deploys in CI on regression.</li>
+      <li>Tools: <b>RAGAS</b>, <b>TruLens</b>, <b>DeepEval</b>, BEIR.</li>
+    </ul>
+  </div>
+
+  <div class="card pad" style="--ac:var(--c2)">
+    <div class="sechead"><div class="ic">👁️</div><h2>Observability</h2></div>
+    <ul class="li">
+      <li><b>LangSmith</b> — trace chains, datasets, prompt diffs.</li>
+      <li><b>Arize Phoenix</b> — embedding drift, cluster explorer.</li>
+      <li><b>OpenTelemetry</b> — vendor-neutral spans per stage.</li>
+      <li><b>Prometheus</b> — QPS, p50/p95/p99, cache hit, GPU.</li>
+      <li><b>Grafana</b> — SLO dashboards + burn-rate alerts.</li>
+    </ul>
+    <div style="margin-top:14px">
+      <div class="tiny" style="display:flex;justify-content:space-between"><span>Retrieval p95</span><span class="mono">≤ 200 ms</span></div><div class="bar"><i style="width:26%"></i></div>
+      <div class="tiny" style="display:flex;justify-content:space-between;margin-top:9px"><span>Rerank p95</span><span class="mono">≤ 300 ms</span></div><div class="bar"><i style="width:38%"></i></div>
+      <div class="tiny" style="display:flex;justify-content:space-between;margin-top:9px"><span>LLM TTFT</span><span class="mono">≤ 800 ms</span></div><div class="bar"><i style="width:66%"></i></div>
+      <div class="tiny" style="display:flex;justify-content:space-between;margin-top:9px"><span>End-to-end p95</span><span class="mono">≤ 2.5 s</span></div><div class="bar"><i style="width:88%"></i></div>
+    </div>
+    <div class="note" style="--ac:var(--c2)">Log the <b>retrieved doc IDs</b> with every answer — without them, no hallucination is ever debuggable.</div>
+  </div>
+</div>
+
+<!-- ============ 4. SCALE / PITFALLS / BEST PRACTICE ============ -->
+<div class="g3 mb">
+  <div class="card pad" style="--ac:var(--c4)">
+    <div class="sechead"><div class="ic">📊</div><h2>Scalability</h2><span class="n">10M+ vectors</span></div>
+    <ul class="li">
+      <li><b>Shard</b> by tenant/domain; replicate for read QPS.</li>
+      <li><b>HNSW</b> M=16–32, efC=200, efSearch tuned per recall SLO.</li>
+      <li><b>Quantize</b> — int8 / binary + rescoring: 4–32× memory cut.</li>
+      <li><b>Matryoshka dims</b> — 1536→512 for first pass, full for rerank.</li>
+      <li><b>Two-stage</b> — cheap ANN wide, expensive rerank narrow.</li>
+      <li><b>Async + batch</b> embedding; GPU batch the reranker.</li>
+      <li><b>Blue/green re-index</b> — build new collection, alias-swap.</li>
+      <li><b>Backpressure</b> — queue depth limits, circuit breakers.</li>
+      <li><b>Autoscale</b> retriever &amp; reranker independently.</li>
+    </ul>
+  </div>
+
+  <div class="card pad" style="--ac:var(--bad)">
+    <div class="sechead"><div class="ic">⚠️</div><h2>Common Pitfalls</h2><span class="n">avoid</span></div>
+    <ul class="li bad">
+      <li>Chunks too large → diluted embeddings; too small → lost context.</li>
+      <li>Pure vector search for exact IDs, codes, names, and numbers.</li>
+      <li>No reranker — top-k is <i>similar</i>, not <i>relevant</i>.</li>
+      <li>Metadata discarded at ingest — unrecoverable later.</li>
+      <li>Mismatched embed model between index and query time.</li>
+      <li>Stale index; no re-embed on document update or model upgrade.</li>
+      <li>Stuffing 50 chunks in → lost-in-the-middle, cost blowup.</li>
+      <li>No citations → unverifiable, untrusted, unshippable.</li>
+      <li>Eyeball "vibes" evaluation instead of a golden set.</li>
+      <li>Treating retrieved text as trusted instructions.</li>
+      <li>Single-region vector DB with no snapshot/restore drill.</li>
+    </ul>
+  </div>
+
+  <div class="card pad" style="--ac:var(--ok)">
+    <div class="sechead"><div class="ic">✅</div><h2>Best Practices</h2><span class="n">do this</span></div>
+    <ul class="li good">
+      <li>Start <b>hybrid</b> (dense + BM25 + RRF) — beats dense-only nearly always.</li>
+      <li><b>Always rerank</b>: retrieve 50 → rerank → keep 5.</li>
+      <li>Chunk <b>400–800 tokens, 10–15% overlap</b>, respect headings.</li>
+      <li><b>Parent-child</b>: embed small, return the parent window.</li>
+      <li>Rewrite / expand the query; HyDE for sparse corpora.</li>
+      <li>Enforce <b>"answer only from context, else say you don't know."</b></li>
+      <li>Return <b>citations + confidence</b> on every response.</li>
+      <li>Version <b>everything</b>: chunker, embed model, prompt, index.</li>
+      <li>Ship an <b>eval gate in CI</b> before any prompt or model change.</li>
+      <li>Cache aggressively; stream tokens to hide latency.</li>
+      <li>Instrument first — you cannot tune what you cannot see.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 5. COMPARISON TABLE ============ -->
+<h3 class="blk" style="--ac:var(--ok)"><span class="num">04</span> Recommended Production Choices</h3>
+<div class="card pad mb" style="--ac:var(--ok);padding:24px 26px 20px">
+  <table>
+    <thead><tr><th style="width:15%">LAYER</th><th style="width:20%">RECOMMENDED DEFAULT</th><th style="width:29%">STRONG ALTERNATIVES</th><th style="width:36%">WHY / WHEN</th></tr></thead>
+    <tbody>
+      <tr><td class="l">Chunking</td><td class="p"><span class="b">Recursive 512 / 64 ovl</span></td><td class="a">Semantic · Parent-Child · Sliding</td><td class="w">Structure-aware and cheap; go semantic only when docs are unstructured prose.</td></tr>
+      <tr><td class="l">Embeddings</td><td class="p"><span class="b">text-embedding-3-large</span></td><td class="a">BGE-M3 · Voyage-3 · E5-mistral · Jina v3</td><td class="w">BGE-M3 when self-hosting or multilingual + sparse in one model.</td></tr>
+      <tr><td class="l">Vector Store</td><td class="p"><span class="b">Qdrant</span></td><td class="a">Pinecone · Weaviate · Milvus · pgvector · FAISS</td><td class="w">Filtered-HNSW + payload ACL; pgvector under 1M rows, Pinecone for zero-ops.</td></tr>
+      <tr><td class="l">Retrieval</td><td class="p"><span class="b">Hybrid + metadata filter</span></td><td class="a">Dense · BM25 · MMR · Multi-Query · Parent</td><td class="w">Dense finds meaning, sparse finds exact tokens — you need both.</td></tr>
+      <tr><td class="l">Fusion</td><td class="p"><span class="b">RRF (k = 60)</span></td><td class="a">Weighted-sum · CombSUM · learned fusion</td><td class="w">Score-scale agnostic, no tuning, robust across corpora.</td></tr>
+      <tr><td class="l">Reranker</td><td class="p"><span class="b">BGE-reranker-v2-m3</span></td><td class="a">Cohere Rerank 3.5 · ColBERTv2 · MiniLM CE</td><td class="w">Biggest single quality jump per engineering hour spent.</td></tr>
+      <tr><td class="l">Generation</td><td class="p"><span class="b">Claude / GPT-class</span></td><td class="a">Gemini · Llama 3.x · Mistral · Qwen · DeepSeek</td><td class="w">Route: small model for easy queries, frontier for synthesis. temp ≤ 0.3.</td></tr>
+      <tr><td class="l">Cache</td><td class="p"><span class="b">Redis + semantic cache</span></td><td class="a">Memcached · provider prompt cache</td><td class="w">Embedding cache is free money; semantic cache needs a 0.95 threshold.</td></tr>
+      <tr><td class="l">Evaluation</td><td class="p"><span class="b">RAGAS + golden set</span></td><td class="a">TruLens · DeepEval · BEIR · human review</td><td class="w">Automated in CI, human-audited monthly on sampled traffic.</td></tr>
+      <tr><td class="l">Observability</td><td class="p"><span class="b">OTel → Prometheus/Grafana</span></td><td class="a">LangSmith · Arize Phoenix · Datadog</td><td class="w">OTel keeps you portable; LangSmith/Phoenix for chain + drift depth.</td></tr>
+      <tr><td class="l">Orchestration</td><td class="p"><span class="b">LangGraph</span></td><td class="a">LlamaIndex · Haystack · custom</td><td class="w">Explicit state machine beats implicit chains once retries + HITL appear.</td></tr>
+      <tr><td class="l">Ingestion</td><td class="p"><span class="b">Kafka + Airflow</span></td><td class="a">Prefect · Dagster · Temporal · cron</td><td class="w">Streams for freshness, DAGs for backfills and full re-index runs.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  <span>PRODUCTION RAG PIPELINE CHEAT SHEET · 14-STAGE LIFECYCLE · ENTERPRISE REFERENCE ARCHITECTURE</span>
+  <span>DESK REFERENCE FOR ML ENGINEERS &amp; AI ARCHITECTS · A2 PORTRAIT · v2026.08</span>
+</footer>
+
+</div>
+</body>
+</html>

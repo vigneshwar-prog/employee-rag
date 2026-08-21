@@ -17,7 +17,9 @@ instead of dumping a stack trace at the learner.
 import argparse
 import sys
 
-from index import get_store
+from langchain_core.chat_history import InMemoryChatMessageHistory
+
+from index import get_store, get_schema
 from generate import answer
 
 
@@ -42,7 +44,7 @@ def ask_loop(store, debug: bool) -> None:
     (question, answer) turns and pass it to answer() each time, so the model can
     resolve back-references. Memory lives only for this session (lost on restart).
     """
-    history = []  # [("human", q1), ("ai", a1), ("human", q2), ("ai", a2), ...]
+    history = InMemoryChatMessageHistory()
     while True:
         try:
             question = input("Question: ").strip()
@@ -62,7 +64,7 @@ def ask_loop(store, debug: bool) -> None:
             continue  # empty line -> just re-prompt
 
         try:
-            result = answer(question, store=store, debug=debug, history=history)
+            result = answer(question, store=store, debug=debug, history=history.messages)
         except Exception as exc:
             # The most likely cause is the local gate being down/unreachable.
             print(f"\n  [error] Could not answer: {exc}")
@@ -80,8 +82,9 @@ def ask_loop(store, debug: bool) -> None:
 
         # Record this turn AFTER a successful answer (so a gate error doesn't
         # poison history), then cap to the last HISTORY_TURNS turns.
-        history += [("human", question), ("ai", result["answer"])]
-        del history[: -2 * HISTORY_TURNS]
+        history.add_user_message(question)
+        history.add_ai_message(result["answer"])
+        del history.messages[: -2 * HISTORY_TURNS]
 
 
 def main() -> None:
@@ -104,6 +107,11 @@ def main() -> None:
         sys.exit(1)
 
     print(BANNER)
+    # Phase 9: show what the system INFERRED about the current sheet, so the user
+    # SEES the detected columns/roles (great demo + debugging aid).
+    schema = get_schema()
+    if schema:
+        print(schema.describe() + "\n")
     ask_loop(store, debug=args.debug)
 
 

@@ -507,7 +507,11 @@
         </div>
         <div>
           <div class="blabel">route = aggregate</div>
-          <div class="fnode proc"><span class="t">len(docs)</span><span class="s">Python owns the COUNT (LLM can't count) — Phase 7</span></div>
+          <div class="fnode proc"><span class="t">count / avg / min / max / sum</span><span class="s">Python owns the math (LLM can't count) — Phase 7, generalized in Phase 9</span></div>
+        </div>
+        <div>
+          <div class="blabel">route = range (Phase 9)</div>
+          <div class="fnode proc"><span class="t">store.get(where={f:{$gt/$lt}})</span><span class="s">numeric/date comparison — dates stored as epoch float</span></div>
         </div>
         <div>
           <div class="blabel">route = semantic</div>
@@ -515,6 +519,16 @@
         </div>
       </div>
       <div class="fdown">↓ <span style="font-size:12px;color:#6b7280">docs + plan</span></div>
+
+      <div class="callout">
+        <b>Phase 9 — the router is schema-driven</b>
+        The four routes above are no longer tied to a fixed domain. At load time
+        <code>schema.py</code> infers each column's ROLE (identity / categorical /
+        numeric / date / freetext) and persists a <code>SchemaProfile</code> to
+        <code>chroma_db/schema.json</code>. The router's known-values AND its prompt are
+        GENERATED from that profile, so "who earns the most" maps to the numeric
+        <code>Salary</code> column with no hardcoded field names.
+      </div>
 
       <div class="fnode proc"><span class="t">⑦ build_messages()</span> <span class="s">— augment: <code>[system rules] + history + [cards + question]</code> (Phase 8b threads history here)</span></div>
       <div class="fdown">↓</div>

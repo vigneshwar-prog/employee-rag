@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+:root{
+  --bg:#070b14;--ink:#eaf0ff;--mut:#8fa0c0;--dim:#5f6f8c;
+  --line:rgba(140,170,230,.16);
+  --c1:#5b9dff;--c2:#22d3ee;--c3:#34d399;--c4:#a78bfa;--c5:#f472b6;
+  --c6:#fbbf24;--c7:#fb7185;--c8:#818cf8;--ok:#2dd4a7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg)}
+body{width:2400px;height:1560px;font-family:Inter,system-ui,sans-serif;color:var(--ink);
+  -webkit-font-smoothing:antialiased;position:relative;overflow:hidden}
+.bgfx{position:absolute;inset:0;background:
+  radial-gradient(1200px 700px at 10% -6%, rgba(91,157,255,.20), transparent 62%),
+  radial-gradient(1100px 700px at 90% 4%, rgba(167,139,250,.15), transparent 62%),
+  radial-gradient(1300px 800px at 50% 106%, rgba(34,211,238,.11), transparent 62%),
+  linear-gradient(180deg,#070b14,#080d18 55%,#060a12)}
+.grid{position:absolute;inset:0;opacity:.28;
+  background-image:linear-gradient(rgba(140,175,235,.075) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(140,175,235,.075) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(120% 95% at 50% 40%,#000 32%,transparent 100%)}
+svg.wires{position:absolute;inset:0;width:2400px;height:1560px;z-index:1}
+.layer{position:absolute;inset:0;z-index:3}
+
+/* header */
+.hd{position:absolute;left:50px;top:34px;right:50px;display:flex;justify-content:space-between;align-items:flex-end}
+h1{font-size:52px;font-weight:900;letter-spacing:-1.8px;line-height:1;
+  background:linear-gradient(96deg,#fff,#bcd6ff 44%,#a78bfa 76%,#22d3ee);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin-top:11px;font-size:18.5px;color:var(--mut)}
+.legend{display:flex;gap:26px;align-items:center;font-size:13.5px;color:var(--mut);
+  font-family:'JetBrains Mono',monospace}
+.lg{display:flex;align-items:center;gap:9px}
+.lg i{width:34px;height:0;border-top:3px solid var(--c6);display:block}
+.lg.d i{border-top:3px dashed var(--c2)}
+.lg.t i{border-top:3px dotted var(--c3)}
+
+/* zone labels */
+.zone{position:absolute;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;
+  letter-spacing:3px;color:var(--dim)}
+.zband{position:absolute;border:1px dashed rgba(140,170,230,.13);border-radius:22px;z-index:0}
+
+/* nodes */
+.n{position:absolute;border-radius:15px;padding:14px 15px;
+  background:linear-gradient(160deg,rgba(255,255,255,.065),rgba(255,255,255,.02));
+  border:1px solid var(--line);backdrop-filter:blur(12px);
+  box-shadow:0 12px 34px rgba(0,0,0,.44),inset 0 1px 0 rgba(255,255,255,.07);overflow:hidden}
+.n::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--ac,#5b9dff),transparent 82%)}
+.n.k{border-color:color-mix(in srgb,var(--ac) 40%,transparent);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--ac) 14%,transparent),rgba(255,255,255,.02));
+  box-shadow:0 12px 34px rgba(0,0,0,.44),0 0 34px color-mix(in srgb,var(--ac) 15%,transparent),inset 0 1px 0 rgba(255,255,255,.08)}
+.n .hdr{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.n .ico{width:30px;height:30px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--ac) 19%,transparent);
+  border:1px solid color-mix(in srgb,var(--ac) 45%,transparent);font-size:15px}
+.n .nm{font-size:17px;font-weight:800;letter-spacing:-.3px;line-height:1.14}
+.n .bdg{position:absolute;top:11px;right:12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  font-weight:800;color:#0a0f1a;background:var(--ac);border-radius:6px;padding:2px 7px}
+.n li{list-style:none;font-size:12.6px;color:#a3b5d6;line-height:1.5;padding-left:11px;position:relative}
+.n li::before{content:'';position:absolute;left:0;top:7px;width:4px;height:4px;border-radius:50%;
+  background:var(--ac);opacity:.85}
+.n .tag{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--dim);margin-top:7px;
+  letter-spacing:.3px}
+footer{position:absolute;left:50px;right:50px;bottom:26px;display:flex;justify-content:space-between;
+  font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--dim);
+  border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="bgfx"></div><div class="grid"></div>
+
+<!-- ================= WIRES ================= -->
+<svg class="wires" viewBox="0 0 2400 1560">
+  <defs>
+    <marker id="aw" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9z" fill="#fbbf24"/></marker>
+    <marker id="ac" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9z" fill="#22d3ee"/></marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="6.5" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8z" fill="#34d399"/></marker>
+    <marker id="ap" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9z" fill="#f472b6"/></marker>
+  </defs>
+
+  <!-- ROW1 offline ingest: horizontal dashed, y=290 -->
+  <g stroke="#22d3ee" stroke-width="2.6" fill="none" stroke-dasharray="9 7" marker-end="url(#ac)" opacity=".85">
+    <path d="M349 290 H377"/><path d="M682 290 H710"/><path d="M1015 290 H1043"/>
+    <path d="M1348 290 H1376"/><path d="M1681 290 H1709"/><path d="M2014 290 H2042"/>
+  </g>
+
+  <!-- ingest -> storage bus (y=440) -->
+  <g stroke="#22d3ee" stroke-width="2.4" fill="none" opacity=".62">
+    <path d="M865 390 V440"/><path d="M1198 390 V440"/><path d="M1864 390 V440"/><path d="M2197 390 V440"/>
+    <path d="M324 440 H2197" stroke-dasharray="9 7"/>
+  </g>
+  <g stroke="#22d3ee" stroke-width="2.6" fill="none" marker-end="url(#ac)" opacity=".85">
+    <path d="M324 440 V486"/><path d="M907 440 V486"/><path d="M1490 440 V486"/><path d="M2073 440 V486"/>
+  </g>
+
+  <!-- storage <-> serving bus (y=760) -->
+  <g stroke="#f472b6" stroke-width="2.4" fill="none" opacity=".55">
+    <path d="M324 690 V760"/><path d="M907 690 V760"/><path d="M1490 690 V760"/><path d="M2073 690 V760"/>
+    <path d="M324 760 H2073"/>
+  </g>
+  <g stroke="#f472b6" stroke-width="2.8" fill="none" marker-end="url(#ap)" opacity=".9">
+    <path d="M1198 760 V806"/><path d="M1456 760 V806"/><path d="M1972 760 V806"/>
+  </g>
+
+  <!-- ROW3 online query: horizontal solid amber, y=915 -->
+  <g stroke="#fbbf24" stroke-width="3.2" fill="none" marker-end="url(#aw)">
+    <path d="M282 915 H302"/><path d="M540 915 H560"/><path d="M798 915 H818"/>
+    <path d="M1056 915 H1076"/><path d="M1314 915 H1334"/><path d="M1572 915 H1592"/>
+    <path d="M1830 915 H1850"/><path d="M2088 915 H2108"/>
+  </g>
+
+  <!-- response return path (curve back under row3) -->
+  <g stroke="#2dd4a7" stroke-width="2.6" fill="none" stroke-dasharray="7 6" opacity=".75">
+    <path d="M2230 1020 V1075 Q2230 1090 2215 1090 H181 Q166 1090 166 1075 V1020"
+          marker-end="url(#ag)"/>
+  </g>
+
+  <!-- ops plane dotted taps -->
+  <g stroke="#34d399" stroke-width="2.2" fill="none" stroke-dasharray="2 7" opacity=".55">
+    <path d="M266 1136 V1096"/><path d="M732 1136 V1096"/><path d="M1198 1136 V1096"/>
+    <path d="M1664 1136 V1096"/><path d="M2130 1136 V1096"/>
+  </g>
+</svg>
+
+<div class="layer">
+
+<!-- ================= HEADER ================= -->
+<div class="hd">
+  <div>
+    <h1>Production RAG — Enterprise Reference Architecture</h1>
+    <div class="sub">Offline ingestion plane · shared data plane · online serving path · cross-cutting operations</div>
+  </div>
+  <div class="legend">
+    <div class="lg d"><i></i><span>OFFLINE INGEST</span></div>
+    <div class="lg"><i></i><span>ONLINE QUERY</span></div>
+    <div class="lg" style="color:#f7a8c8"><i style="border-color:#f472b6"></i><span>DATA ACCESS</span></div>
+    <div class="lg t"><i></i><span>TELEMETRY</span></div>
+  </div>
+</div>
+
+<!-- ================= ZONE BANDS ================= -->
+<div class="zband" style="left:32px;top:168px;width:2336px;height:244px"></div>
+<div class="zband" style="left:32px;top:468px;width:2336px;height:244px"></div>
+<div class="zband" style="left:32px;top:788px;width:2336px;height:254px"></div>
+<div class="zband" style="left:32px;top:1118px;width:2336px;height:214px"></div>
+<div class="zone" style="left:50px;top:146px">① OFFLINE INGESTION PLANE — batch + CDC, runs continuously, off the request path</div>
+<div class="zone" style="left:50px;top:446px">② DATA PLANE — durable shared state</div>
+<div class="zone" style="left:50px;top:766px">③ ONLINE SERVING PATH — synchronous, p95 &lt; 2.5 s</div>
+<div class="zone" style="left:50px;top:1096px">④ OPERATIONS PLANE — cross-cutting, taps every stage</div>
+
+<!-- ================= ROW 1 : INGEST ================= -->
+<div class="n" style="--ac:var(--c1);left:50px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">📚</div><div class="nm">Data Sources</div></div>
+  <li>PDF · DOCX · HTML · MD</li><li>Confluence · Notion · Jira</li><li>SQL / warehouse · APIs</li><li>SharePoint · Drive · S3</li>
+  <div class="tag">connectors + CDC watermarks</div>
+</div>
+<div class="n" style="--ac:var(--c2);left:383px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">📨</div><div class="nm">Kafka + Airflow</div></div>
+  <li>ingest topics · partitions</li><li>DAG backfill &amp; re-index</li><li>retry · DLQ · replay</li><li>idempotent by content hash</li>
+  <div class="tag">streams = freshness, DAG = bulk</div>
+</div>
+<div class="n" style="--ac:var(--c2);left:716px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">🧹</div><div class="nm">Parse &amp; Normalize</div></div>
+  <li>OCR · layout · table extract</li><li>→ Markdown, strip chrome</li><li>Unicode · lang detect</li><li>raw blob → Object Storage</li>
+  <div class="tag">Unstructured · Docling · Tika</div>
+</div>
+<div class="n" style="--ac:var(--c3);left:1049px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">🏷️</div><div class="nm">Metadata + PII</div></div>
+  <li>doc_id · source · url · ver</li><li><b style="color:#8ff0c8">allowed_groups[]</b> · tenant</li><li>section path · timestamps</li><li>Presidio redaction pre-embed</li>
+  <div class="tag">ACL decided here, enforced later</div>
+</div>
+<div class="n" style="--ac:var(--c3);left:1382px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">✂️</div><div class="nm">Chunker</div></div>
+  <li>Recursive 512 tok / 64 ovl</li><li>Semantic · Sliding window</li><li>Parent-child linkage</li><li>heading-aware boundaries</li>
+  <div class="tag">version the chunker config</div>
+</div>
+<div class="n" style="--ac:var(--c4);left:1715px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">🧬</div><div class="nm">Embedder</div></div>
+  <li>batch GPU · async workers</li><li>OpenAI-3 / BGE-M3 / Voyage</li><li>dense + sparse in one pass</li><li>int8 · Matryoshka dims</li>
+  <div class="tag">same model at query time</div>
+</div>
+<div class="n" style="--ac:var(--c5);left:2048px;top:190px;width:299px;height:200px">
+  <div class="hdr"><div class="ico">⬆️</div><div class="nm">Upsert / Index</div></div>
+  <li>vectors + payload atomically</li><li>HNSW build · alias swap</li><li>blue/green re-index</li><li>tombstone on delete</li>
+  <div class="tag">never mutate a live collection</div>
+</div>
+
+<!-- ================= ROW 2 : DATA PLANE ================= -->
+<div class="n k" style="--ac:var(--c2);left:50px;top:490px;width:549px;height:200px">
+  <div class="hdr"><div class="ico">🪣</div><div class="nm">Object Storage — S3 / GCS</div></div>
+  <li>raw blobs + parsed artifacts, immutable &amp; versioned</li>
+  <li>source of truth for full rebuilds — index is derived, never authoritative</li>
+  <li>lifecycle tiering · SSE-KMS encryption at rest</li>
+  <div class="tag">rebuild-from-scratch must always be possible</div>
+</div>
+<div class="n k" style="--ac:var(--c5);left:633px;top:490px;width:549px;height:200px">
+  <div class="hdr"><div class="ico">🗄️</div><div class="nm">Vector DB — Qdrant / Pinecone</div></div>
+  <li>HNSW (M 16–32, efC 200) · filtered ANN, ACL applied <b style="color:#f9b0d0">in-query</b></li>
+  <li>sharded by tenant · replicas for read QPS · snapshots</li>
+  <li>payload index on manager / project / technology</li>
+  <div class="tag">alt: Weaviate · Milvus · pgvector · FAISS</div>
+</div>
+<div class="n k" style="--ac:var(--c4);left:1216px;top:490px;width:549px;height:200px">
+  <div class="hdr"><div class="ico">🧾</div><div class="nm">Metadata DB — Postgres</div></div>
+  <li>document registry, versions, chunk ↔ parent map</li>
+  <li>RBAC tables, group membership, tenant config</li>
+  <li>join target for structured filters the vector store can't express</li>
+  <div class="tag">the system of record for permissions</div>
+</div>
+<div class="n k" style="--ac:var(--c7);left:1799px;top:490px;width:549px;height:200px">
+  <div class="hdr"><div class="ico">⚡</div><div class="nm">Redis — Multi-Layer Cache</div></div>
+  <li>embedding (∞ TTL) · retrieval (5–60 m) · rerank pairs</li>
+  <li>semantic cache: cosine ≥ 0.95 → serve prior answer</li>
+  <li>keys include model, version, filters, tenant</li>
+  <div class="tag">target 30–60% hit rate</div>
+</div>
+
+<!-- ================= ROW 3 : SERVING ================= -->
+<div class="n" style="--ac:var(--c1);left:50px;top:810px;width:232px;height:210px">
+  <div class="bdg">1</div>
+  <div class="hdr"><div class="ico">💻</div><div class="nm">Client</div></div>
+  <li>web · Slack · IDE</li><li>streaming UI</li><li>👍/👎 feedback</li>
+  <div class="tag">SSE / WebSocket</div>
+</div>
+<div class="n k" style="--ac:var(--c1);left:308px;top:810px;width:232px;height:210px">
+  <div class="bdg">2</div>
+  <div class="hdr"><div class="ico">🌐</div><div class="nm">API Gateway</div></div>
+  <li>REST / gRPC</li><li>rate limit · quota</li><li>WAF · schema val</li><li>trace_id minted</li>
+  <div class="tag">Kong · Envoy · APIGW</div>
+</div>
+<div class="n k" style="--ac:var(--c1);left:566px;top:810px;width:232px;height:210px">
+  <div class="bdg">3</div>
+  <div class="hdr"><div class="ico">🔐</div><div class="nm">Auth / IdP</div></div>
+  <li>OAuth2 · OIDC · JWT</li><li>SSO · MFA</li><li>tenant + group claims</li><li>RBAC scope resolve</li>
+  <div class="tag">claims → ACL filter</div>
+</div>
+<div class="n" style="--ac:var(--c1);left:824px;top:810px;width:232px;height:210px">
+  <div class="bdg">4</div>
+  <div class="hdr"><div class="ico">⚖️</div><div class="nm">Load Balancer</div></div>
+  <li>L7 · stateless</li><li>health checks</li><li>HPA autoscale</li><li>circuit breaker</li>
+  <div class="tag">no sticky sessions</div>
+</div>
+<div class="n k" style="--ac:var(--c6);left:1082px;top:810px;width:232px;height:210px">
+  <div class="bdg">5</div>
+  <div class="hdr"><div class="ico">🔍</div><div class="nm">Retriever</div></div>
+  <li>query rewrite / HyDE</li><li>dense + BM25 fan-out</li><li>RRF fuse (k=60)</li><li>ACL + metadata filter</li>
+  <div class="tag">top-50 candidates</div>
+</div>
+<div class="n k" style="--ac:var(--c7);left:1340px;top:810px;width:232px;height:210px">
+  <div class="bdg">6</div>
+  <div class="hdr"><div class="ico">🎯</div><div class="nm">Reranker</div></div>
+  <li>cross-encoder, GPU pool</li><li>BGE-v2-m3 / Cohere</li><li>batched inference</li><li>50 → top-5</li>
+  <div class="tag">biggest quality lever</div>
+</div>
+<div class="n k" style="--ac:var(--c8);left:1598px;top:810px;width:232px;height:210px">
+  <div class="bdg">7</div>
+  <div class="hdr"><div class="ico">🧩</div><div class="nm">Prompt Builder</div></div>
+  <li>system + guardrails</li><li>numbered ctx blocks</li><li>token budget &amp; trim</li><li>injection scrubbing</li>
+  <div class="tag">parent-window expand</div>
+</div>
+<div class="n k" style="--ac:var(--c8);left:1856px;top:810px;width:232px;height:210px">
+  <div class="bdg">8</div>
+  <div class="hdr"><div class="ico">🤖</div><div class="nm">LLM Gateway</div></div>
+  <li>Claude · GPT · Gemini</li><li>Llama · Mistral · Qwen</li><li>router · fallback</li><li>stream · budget cap</li>
+  <div class="tag">temp ≤ 0.3</div>
+</div>
+<div class="n k" style="--ac:var(--ok);left:2114px;top:810px;width:232px;height:210px">
+  <div class="bdg">9</div>
+  <div class="hdr"><div class="ico">✅</div><div class="nm">Response</div></div>
+  <li>inline [1][2] citations</li><li>confidence score</li><li>groundedness gate</li><li>abstain below τ</li>
+  <div class="tag">stream → client</div>
+</div>
+
+<!-- ================= ROW 4 : OPS ================= -->
+<div class="n" style="--ac:var(--c3);left:50px;top:1140px;width:432px;height:170px">
+  <div class="hdr"><div class="ico">📈</div><div class="nm">Monitoring</div></div>
+  <li>Prometheus metrics · Grafana SLO boards</li>
+  <li>QPS · p50/p95/p99 · cache hit · GPU util</li>
+  <li>burn-rate alerts, paging on SLO breach</li>
+</div>
+<div class="n" style="--ac:var(--c3);left:516px;top:1140px;width:432px;height:170px">
+  <div class="hdr"><div class="ico">📝</div><div class="nm">Logging &amp; Tracing</div></div>
+  <li>OpenTelemetry span per stage, one trace_id</li>
+  <li>log retrieved doc_ids with every answer</li>
+  <li>immutable audit trail: who saw which doc</li>
+</div>
+<div class="n" style="--ac:var(--c3);left:982px;top:1140px;width:432px;height:170px">
+  <div class="hdr"><div class="ico">🧪</div><div class="nm">Eval Harness</div></div>
+  <li>RAGAS / TruLens · 150–300 golden Q/A</li>
+  <li>Recall@K · MRR · NDCG · faithfulness</li>
+  <li>CI gate blocks prompt/model regressions</li>
+</div>
+<div class="n" style="--ac:var(--c3);left:1448px;top:1140px;width:432px;height:170px">
+  <div class="hdr"><div class="ico">🛡️</div><div class="nm">Guardrails</div></div>
+  <li>prompt-injection scrub on retrieved text</li>
+  <li>PII · toxicity · topic policy filters</li>
+  <li>groundedness check before the answer ships</li>
+</div>
+<div class="n" style="--ac:var(--c3);left:1914px;top:1140px;width:432px;height:170px">
+  <div class="hdr"><div class="ico">🔑</div><div class="nm">Secrets Manager</div></div>
+  <li>Vault / KMS · automatic rotation</li>
+  <li>short-lived creds, workload identity</li>
+  <li>zero keys in env files or images</li>
+</div>
+
+<footer>
+  <span>PRODUCTION RAG — ENTERPRISE REFERENCE ARCHITECTURE · 4 PLANES · 9-HOP SYNCHRONOUS QUERY PATH</span>
+  <span>COMPANION TO: PRODUCTION RAG PIPELINE CHEAT SHEET · v2026.08</span>
+</footer>
+
+</div>
+</body>
+</html>

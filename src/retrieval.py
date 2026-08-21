@@ -1,125 +1,138 @@
 """
-Phase 3 — Hybrid retrieval.
+Phase 3 (+ Phase 9) — Hybrid retrieval, now SCHEMA-AGNOSTIC.
 
 The core learning of the project. A single semantic search can't answer
 "who reports to Dhruv Sharma?" or "list everyone on MPLS" — those are EXACT,
-COMPLETE set queries, not fuzzy similarity. So we combine two strategies:
+COMPLETE set queries, not fuzzy similarity. So we combine strategies:
 
-    SEMANTIC  (embeddings)  -> fuzzy, meaning-based ("who knows automation-ish stuff?")
-    METADATA  (Chroma where)-> exact, complete      ("everyone whose manager == Dhruv Sharma")
+    SEMANTIC  (embeddings)   -> fuzzy, meaning-based ("who knows automation-ish?")
+    METADATA  (Chroma where) -> exact, complete      ("everyone whose Manager == Dhruv")
+    AGGREGATE (Python)       -> count / avg / min / max / sum over a column
+    RANGE     (Chroma $gt/$lt, Phase 9) -> "salary > 20 lakhs", "joined after 2022"
 
-How we DECIDE which to use — and this works because our data is tiny and
-categorical (7 managers, 9 real projects, 12 technologies, 97 names, all known):
+PHASE 9 — what changed vs. the old fixed-4-column version
+---------------------------------------------------------
+Nothing about the ROUTES is hardcoded to a domain anymore. We load the persisted
+SchemaProfile (index.get_schema) and drive everything from it:
+  - the "known values" = every CATEGORICAL column's distinct values (not a fixed 4).
+  - the LLM router PROMPT is generated from the schema (columns + roles + values),
+    so the model maps "who earns the most" -> the numeric `salary` column, or
+    "grade A" -> the categorical `Grade` column, with no per-domain code.
+  - a NEW `range` route handles numeric/date comparisons the old system couldn't,
+    and `aggregate` generalizes from count-only to avg/min/max/sum.
 
-    scan the question for any KNOWN value.
-      - found a known manager/project/technology/name?  -> exact metadata filter
-      - found nothing to filter on?                       -> semantic search
-
-No ML classifier, no guessing. Just "does the question mention something we know?"
+The guardrail philosophy is unchanged: we NEVER trust the LLM's proposed value
+blindly — categoricals are snapped to a real stored value (fuzzy), numerics/dates
+must parse, else we fall back to semantic.
 
 Run it to try questions live:
     python src/retrieval.py
 """
 
-from index import get_store
+from __future__ import annotations
+
+import json
+import difflib
+
+from index import get_store, get_schema
+from schema import CATEGORICAL, NUMERIC, DATE
 
 
-# --- Which metadata field is a value's "home", and how we detect it ---------
-# We scan the question for known values. Order matters: NAME first (most specific),
-# then manager/project/technology. "Unassigned" is deliberately NOT detectable —
-# nobody asks "who is on the Unassigned project", and it would false-match.
-FILTERABLE_FIELDS = ["name", "manager", "project", "technology"]
+# Below this similarity ratio (0..1) we don't trust a fuzzy snap and use semantic.
+FUZZY_SNAP_THRESHOLD = 0.6
+
+# Categorical placeholder we never want to match on.
 SKIP_VALUES = {"Unassigned"}
 
-# Intent cues: phrases that reveal WHICH field the user means, independent of the
-# value. "who reports to Dhruv" and "Dhruv's team" both mean manager==Dhruv, even
-# though "Dhruv Sharma" is ALSO a person's name. When a cue is present we prefer its
-# field, so we don't mistake "reports to Dhruv" for a lookup of Dhruv's own record.
-FIELD_CUES = {
-    "manager": ["reports to", "report to", "reporting to", "managed by",
-                "manager of", "'s team", "s team", "under ", "who does "],
-    "project": ["project", "working on the", "on the"],
-    "technology": ["technology", "tech", "skill", "specializ", "works with",
-                   "knows", "expert in"],
-}
 
+# ============================================================================
+# SCHEMA-DRIVEN "known values" (generalizes the old fixed-4 _known_values)
+# ============================================================================
+def _known_values(store, schema=None) -> dict[str, list[str]]:
+    """{categorical_column: [distinct values]} — the vocabulary the router validates
+    against. Read straight from the inferred schema (Phase 9). Falls back to reading
+    the store's string metadata if no schema was persisted (older index).
 
-def _known_values(store) -> dict[str, list[str]]:
-    """Read the distinct values actually stored in Chroma, per field.
-
-    We build the detector from the DATA itself (not a hand-typed list) so it can
-    never drift out of sync with what's in the index.
+    Also includes the identity column under its real name AND under the stable key
+    "name", so name lookups keep working regardless of what the label column is called.
     """
-    metas = store.get()["metadatas"]
-    values: dict[str, list[str]] = {}
-    for field in FILTERABLE_FIELDS:
-        distinct = {m[field] for m in metas if m.get(field) not in SKIP_VALUES}
-        # Longest-first so "R&S (Routing & Switching)" is tried before a short token.
-        values[field] = sorted(distinct, key=len, reverse=True)
+    values: dict[str, list[str]]
+    if schema is not None:
+        values = {col: [v for v in vals if v not in SKIP_VALUES]
+                  for col, vals in schema.distinct_values().items()}
+    else:
+        metas = store.get()["metadatas"]
+        acc: dict[str, set] = {}
+        for m in metas:
+            for k, v in m.items():
+                if k != "name" and isinstance(v, str) and v not in SKIP_VALUES:
+                    acc.setdefault(k, set()).add(v)
+        values = {k: sorted(vs, key=len, reverse=True) for k, vs in acc.items()}
+
+    # The identity values live in metadata under "name" (stable key). Expose them so
+    # the router can filter/lookup by the row label.
+    names = sorted({m["name"] for m in store.get()["metadatas"] if m.get("name")},
+                   key=len, reverse=True)
+    values["name"] = names
     return values
 
 
+# ============================================================================
+# GENERIC rule-based fallback (used when the gate is down — no domain cues)
+# ============================================================================
 def detect_filter(question: str, known: dict[str, list[str]]) -> tuple[str, str] | None:
-    """Return (field, value) if the question mentions a known value, else None.
-
-    Two-step so we get the RIGHT field, not just any field:
-      1. If an intent cue is present (e.g. "reports to" -> manager), try to match a
-         known value for THAT field first. This resolves the ambiguity where a
-         person's name is also a manager's name ("who reports to Dhruv Sharma?").
-      2. Otherwise, scan all fields (name first = most specific).
-    Matching is case-insensitive substring, so "mpls" matches "MPLS".
-    """
+    """Return (column, value) if the question mentions a known categorical/identity
+    value, else None. Domain-agnostic: just case-insensitive substring scan, most
+    specific (identity/name) first, then the longest values. No hardcoded field cues."""
     q = question.lower()
-
-    # Step 1 — cue-guided: does the phrasing point at a specific field?
-    for field, cues in FIELD_CUES.items():
-        if any(cue in q for cue in cues):
-            for value in known[field]:
-                if value.lower() in q:
-                    return field, value
-
-    # Step 2 — fallback: scan every field, most-specific (name) first.
-    for field in FILTERABLE_FIELDS:
+    # identity/name first (most specific)
+    ordered = (["name"] if "name" in known else []) + \
+              [k for k in known if k != "name"]
+    for field in ordered:
         for value in known[field]:
-            if value.lower() in q:
+            if value and value.lower() in q:
                 return field, value
     return None
 
 
 # ============================================================================
-# LLM-ROUTER (Phase 3.5 — the upgrade from the playground finding)
-# ----------------------------------------------------------------------------
-# The rule-based detect_filter() above only matches EXACT stored values, so
-# "Reyan" (partial) or "reyen" (typo) fell through to semantic and gave wrong
-# answers. Fix: let the LLM READ the question and propose {route, field, value} —
-# it handles partials, typos, and synonyms. BUT the LLM can hallucinate a value
-# not in the data ("Vignesh" != "Vigneshwar B"), which would filter to 0 results.
-# So we NEVER trust its value blindly: we validate it against the known lists and
-# fuzzy-snap to the nearest real value, else fall back to semantic.
+# LLM ROUTER — now generated FROM the schema
 # ============================================================================
-import json
-import difflib
+def _router_system_prompt(schema, known: dict[str, list[str]]) -> str:
+    """Describe THIS sheet's columns/roles/values to the LLM and ask for a strict
+    JSON routing decision. Fully generic — works for any schema."""
+    cat_lines = []
+    for col in schema.categorical:
+        vals = known.get(col, [])
+        shown = vals[:25] + (["..."] if len(vals) > 25 else [])
+        cat_lines.append(f'  - "{col}" (categorical) values: {shown}')
+    num_lines = [f'  - "{c.name}" (numeric) range {c.minimum}..{c.maximum}'
+                 for c in schema.columns.values() if c.role == NUMERIC]
+    date_lines = [f'  - "{c.name}" (date)' for c in schema.columns.values() if c.role == DATE]
+    cols_desc = "\n".join(cat_lines + num_lines + date_lines) or "  (none)"
 
-# Below this similarity ratio (0..1) we don't trust a fuzzy snap and use semantic.
-FUZZY_SNAP_THRESHOLD = 0.6
-
-
-def _router_system_prompt(known: dict[str, list[str]]) -> str:
-    """Give the LLM the known vocabulary and ask for a strict JSON routing decision."""
     return (
-        "You are a query router for an employee database.\n"
-        f"Known managers: {known['manager']}\n"
-        f"Known projects: {known['project']}\n"
-        f"Known technologies: {known['technology']}\n\n"
+        "You are a query router for a table of records.\n"
+        f"The identity (label) column is \"{schema.identity}\"; refer to it as \"name\".\n"
+        "Filterable columns and their types:\n"
+        f"{cols_desc}\n\n"
         "Decide how to answer the user's question. Reply with ONLY a JSON object:\n"
-        '{"route": "metadata" | "semantic" | "aggregate", '
-        '"field": "name" | "manager" | "project" | "technology" | null, '
-        '"value": "<the exact known value, fixing typos/partials to the closest known value>" | null}\n\n'
-        "Use metadata when the question asks WHO/WHICH people match a specific "
-        "manager/project/technology/person (it lists them).\n"
-        "Use aggregate when the question asks HOW MANY / the COUNT / the TOTAL number of people "
-        "(optionally within a manager/project/technology). Use field=null, value=null for a grand total.\n"
-        "Use semantic for fuzzy/meaning questions with no specific known entity.\n"
+        '{"route": "metadata" | "semantic" | "aggregate" | "range", '
+        '"field": "<column name, or \\"name\\" for the identity>" | null, '
+        '"value": "<categorical: closest known value, fixing typos/partials; '
+        'range: the threshold as a plain number, or YYYY-MM-DD for a date>" | null, '
+        '"op": ">" | "<" | ">=" | "<=" | "between" | null, '
+        '"value2": "<upper bound if op==between>" | null, '
+        '"agg": "count" | "avg" | "min" | "max" | "sum" | null}\n\n'
+        "Route guide:\n"
+        "- metadata: WHO/WHICH records match an exact categorical (or name) value; "
+        "lists them. field=that column, value=the known value.\n"
+        "- range: numeric/date comparison (greater/less/after/before/between). "
+        "field=the numeric or date column, op=the comparator, value=the threshold.\n"
+        "- aggregate: HOW MANY / AVERAGE / MIN / MAX / TOTAL. agg=the operation; "
+        "field=the numeric column for avg/min/max/sum (null for a plain count); "
+        "optionally value=a categorical value to scope the aggregate.\n"
+        "- semantic: fuzzy/meaning questions with no specific column/value.\n"
         "Output only the JSON, nothing else."
     )
 
@@ -136,45 +149,55 @@ def _parse_router_json(text: str) -> dict | None:
 
 
 def resolve_value(field: str, value: str, known: dict[str, list[str]]) -> str | None:
-    """Guardrail: map the LLM's proposed value to a REAL stored value, or None.
-
-    - exact (case-insensitive) match  -> that stored value
-    - otherwise fuzzy-snap to the closest known value if similar enough
-    - else None (caller falls back to semantic)
+    """Guardrail: map the LLM's proposed CATEGORICAL/name value to a REAL stored
+    value, or None (caller falls back to semantic).
+      - exact (case-insensitive) match  -> that stored value
+      - otherwise fuzzy-snap to the closest known value if similar enough
     """
     if not value or field not in known:
         return None
     candidates = known[field]
-    # 1. exact, case-insensitive
     for c in candidates:
         if c.lower() == value.lower():
             return c
-    # 2. fuzzy: closest known value above the threshold
     match = difflib.get_close_matches(value, candidates, n=1, cutoff=FUZZY_SNAP_THRESHOLD)
     return match[0] if match else None
 
 
-def llm_route(question: str, known: dict[str, list[str]]):
+def _parse_threshold(value, schema, field) -> float | None:
+    """Parse a range threshold into the numeric form we STORED in metadata.
+    Numeric columns -> float. Date columns -> epoch seconds (matches _meta_value).
+    Returns None if it can't parse -> caller falls back to semantic."""
+    role = schema.columns[field].role if field in schema.columns else None
+    if role == DATE:
+        import pandas as pd
+        dt = pd.to_datetime(value, errors="coerce")
+        return None if pd.isna(dt) else float(dt.timestamp())
+    try:
+        return float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def llm_route(question: str, known: dict[str, list[str]], schema):
     """Ask the LLM to route; return a PLAN dict, or None for semantic/fallback.
 
     Plan shapes:
-      {"route": "metadata",  "field": <f>, "value": <real>}   -> list matching people
-      {"route": "aggregate", "field": <f>, "value": <real>}   -> COUNT within that filter
-      {"route": "aggregate", "field": None, "value": None}    -> COUNT everyone (grand total)
-
-    Any failure (gate down, bad JSON, unvalidated value) returns None so the caller
-    degrades gracefully to the rule-based detector / semantic search. As always, we
-    NEVER trust the LLM's value blindly — it's resolved against the known lists first.
+      {"route":"metadata",  "field", "value"}                          -> list matches
+      {"route":"range",     "field", "op", "value"[, "value2"]}        -> numeric/date filter
+      {"route":"aggregate", "agg":"count", "field"|None, "value"|None} -> count
+      {"route":"aggregate", "agg":avg|min|max|sum, "field",
+                            "scope_field", "scope_value"}               -> numeric aggregate
+    Any failure returns None so the caller degrades to rule-based / semantic.
     """
+    if schema is None:
+        return None
     try:
         from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(
-            base_url="http://localhost:8080/v1", api_key="unused",
-            model="claude-sonnet-5", temperature=0,
-        )
-        reply = llm.invoke(
-            [("system", _router_system_prompt(known)), ("human", question)]
-        ).content
+        llm = ChatOpenAI(base_url="http://localhost:8080/v1", api_key="unused",
+                         model="claude-sonnet-5", temperature=0)
+        reply = llm.invoke([("system", _router_system_prompt(schema, known)),
+                            ("human", question)]).content
     except Exception:
         return None  # gate unreachable -> let caller fall back
 
@@ -182,93 +205,134 @@ def llm_route(question: str, known: dict[str, list[str]]):
     if not decision:
         return None
     route = decision.get("route")
-    if route not in ("metadata", "aggregate"):
-        return None  # semantic (or unknown) -> caller falls back
+    field = decision.get("field")
 
-    field, raw_value = decision.get("field"), decision.get("value")
+    # --- RANGE (numeric/date comparison) ---
+    if route == "range":
+        if field not in schema.columns or schema.columns[field].role not in (NUMERIC, DATE):
+            return None
+        op = decision.get("op")
+        if op not in (">", "<", ">=", "<=", "between"):
+            return None
+        lo = _parse_threshold(decision.get("value"), schema, field)
+        if lo is None:
+            return None
+        plan = {"route": "range", "field": field, "op": op, "value": lo}
+        if op == "between":
+            hi = _parse_threshold(decision.get("value2"), schema, field)
+            if hi is None:
+                return None
+            plan["value2"] = hi
+        return plan
 
-    # Grand-total count: "how many employees in total?" — no field to resolve.
-    # HARDENING (Phase 8a): the old code took this branch for ANY field=null aggregate.
-    # But the LLM also emits field=null when it CAN'T tie a bogus entity to a field
-    # ("people under Vihaan" — Vihaan isn't a manager). That silently became "count
-    # everyone", skipping resolve_value() entirely and letting the model fabricate a
-    # count. Now we only allow the grand-total branch when the question actually reads
-    # like a total; otherwise we fall back (None) so the guardrail path stays in force.
-    if route == "aggregate" and not field:
-        if any(cue in question.lower() for cue in ("total", "all ", " all", "everyone",
-                                                    "how many employees", "how many people",
-                                                    "entire team", "whole team")):
-            return {"route": "aggregate", "field": None, "value": None}
-        return None  # bogus/underspecified entity -> fall back, do NOT count everyone
-
-    # Otherwise resolve the value against real stored data (guardrail).
-    if field == "name":
-        real = resolve_value("name", raw_value, {"name": known["name"]})
-    else:
+    # --- AGGREGATE (count / avg / min / max / sum) ---
+    if route == "aggregate":
+        agg = decision.get("agg") or "count"
+        raw_value = decision.get("value")
+        if agg in ("avg", "min", "max", "sum"):
+            if field not in schema.columns or schema.columns[field].role != NUMERIC:
+                return None
+            scope_field, scope_value = None, None
+            if raw_value:  # optional categorical scope, e.g. "avg salary in MPLS"
+                for cat in schema.categorical:
+                    real = resolve_value(cat, raw_value, known)
+                    if real:
+                        scope_field, scope_value = cat, real
+                        break
+            return {"route": "aggregate", "agg": agg, "field": field,
+                    "scope_field": scope_field, "scope_value": scope_value}
+        # plain COUNT
+        if not field:
+            # LLM sometimes gives value but not field (e.g. field=null, value="Aditya
+            # Sharma"). Recover the scope column by snapping the value to a categorical.
+            if raw_value:
+                for cat in schema.categorical:
+                    real = resolve_value(cat, raw_value, known)
+                    if real:
+                        return {"route": "aggregate", "agg": "count", "field": cat, "value": real}
+            if any(cue in question.lower() for cue in ("total", "all ", " all", "everyone",
+                    "entire team", "whole team", "how many people", "how many employees",
+                    "how many records", "how many rows")):
+                return {"route": "aggregate", "agg": "count", "field": None, "value": None}
+            return None  # underspecified -> fall back (don't silently count everyone)
         real = resolve_value(field, raw_value, known)
-    if not real:
-        return None  # couldn't tie it to real data -> fall back
-    return {"route": route, "field": field, "value": real}
+        if not real:
+            return None
+        return {"route": "aggregate", "agg": "count", "field": field, "value": real}
+
+    # --- METADATA (exact categorical / name filter) ---
+    if route == "metadata":
+        real = resolve_value(field, decision.get("value"), known)
+        if not real:
+            return None
+        return {"route": "metadata", "field": field, "value": real}
+
+    return None  # semantic / unknown -> caller falls back
 
 
-def retrieve_with_plan(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
-    """Route the question and return (docs, plan).
-
-    `plan` tells the caller WHAT happened so it can phrase the answer:
-      {"route": "metadata",  "field", "value"}                 -> docs = matching people
-      {"route": "aggregate", "field", "value", "count": int}   -> docs = matched people, count = how many
-      {"route": "semantic"}                                    -> docs = top-k similar
-
-    Routing order (each step degrades gracefully to the next):
-      1. LLM router  -> understands partials/typos/synonyms, validated to a real value
-      2. rule-based  -> exact-substring detector (works even if the gate is down)
-      3. semantic    -> fuzzy fallback when nothing filterable is found
-    """
+def retrieve_with_plan(question: str, store=None, k: int = 4, debug: bool = True,
+                       use_llm: bool = True, schema=None):
+    """Route the question and return (docs, plan). Degrades gracefully:
+      1. LLM router (schema-driven) 2. generic rule-based 3. semantic."""
     if store is None:
         store = get_store()
+    if schema is None:
+        schema = get_schema()
 
-    known = _known_values(store)
+    known = _known_values(store, schema)
 
-    # 1. LLM router (primary) -> a plan dict. 2. rule-based detector (fallback) -> a tuple
-    #    we normalize into a metadata plan.
-    plan = None
-    reason = ""
-    if use_llm:
-        plan = llm_route(question, known)
+    plan, reason = None, ""
+    if use_llm and schema is not None:
+        plan = llm_route(question, known, schema)
         if plan:
             reason = "LLM router"
-    if plan is None:
+    if plan is None:  # gate down / no schema -> generic substring detector
         hit = detect_filter(question, known)
         if hit:
             plan = {"route": "metadata", "field": hit[0], "value": hit[1]}
             reason = "rule-based"
 
-    return _execute_plan(plan, question, store, k, debug, reason)
+    return _execute_plan(plan, question, store, k, debug, reason, schema)
 
 
-def _execute_plan(plan, question: str, store, k: int, debug: bool, reason: str = ""):
-    """Run ONE resolved plan -> (docs, plan). This is the aggregate/metadata/semantic
-    tail that used to be inlined in retrieve_with_plan, lifted out verbatim so it can
-    be reused per sub-plan by retrieve_multi(). `plan` may be None -> semantic fallback.
-    Semantic search uses the sub-plan's own text (plan['question']) when present.
-    """
-    # --- AGGREGATE: count, don't list. Python owns the number (LLM is bad at counting). ---
+def _execute_plan(plan, question: str, store, k: int, debug: bool, reason: str = "", schema=None):
+    """Run ONE resolved plan -> (docs, plan). plan=None -> semantic fallback."""
+
+    # --- AGGREGATE: count / avg / min / max / sum. Python owns the number. ---
     if plan and plan["route"] == "aggregate":
-        field, value = plan["field"], plan["value"]
-        if field:  # count within a filter, e.g. manager == Dhruv Sharma
-            results = store.get(where={field: value})
+        agg = plan.get("agg", "count")
+        if agg == "count":
+            field, value = plan.get("field"), plan.get("value")
+            results = store.get(where={field: value}) if field else store.get()
             docs = _get_result_to_docs(results)
-            where_txt = f"where {field} == {value!r}"
-        else:       # grand total: count everyone
-            results = store.get()
-            docs = _get_result_to_docs(results)
-            where_txt = "ALL employees"
-        plan["count"] = len(docs)
+            plan["count"] = len(docs)
+            if debug:
+                where_txt = f"where {field} == {value!r}" if field else "ALL records"
+                print(f"  [route] AGGREGATE count ({reason})  {where_txt}  -> {plan['count']}")
+            return docs, plan
+        # numeric aggregate (avg/min/max/sum) over plan['field'], optional scope
+        field = plan["field"]
+        sf, sv = plan.get("scope_field"), plan.get("scope_value")
+        results = store.get(where={sf: sv}) if sf else store.get()
+        nums = [m[field] for m in results["metadatas"]
+                if isinstance(m.get(field), (int, float)) and not isinstance(m.get(field), bool)]
+        plan["agg_value"] = _aggregate(agg, nums)
         if debug:
-            print(f"  [route] AGGREGATE ({reason})  count {where_txt}  -> {plan['count']}")
+            scope = f" in {sf}=={sv!r}" if sf else ""
+            print(f"  [route] AGGREGATE {agg}({field}){scope} ({reason}) -> {plan['agg_value']}")
+        return _get_result_to_docs(results), plan
+
+    # --- RANGE: numeric/date comparison via Chroma $gt/$lt. ---
+    if plan and plan["route"] == "range":
+        field, op, val = plan["field"], plan["op"], plan["value"]
+        results = store.get(where=_range_where(field, op, val, plan.get("value2")))
+        docs = _get_result_to_docs(results)
+        if debug:
+            hi = f"..{plan.get('value2')}" if op == "between" else ""
+            print(f"  [route] RANGE ({reason})  {field} {op} {val}{hi}  -> {len(docs)} match(es)")
         return docs, plan
 
-    # --- METADATA: exact filter, list the people. ---
+    # --- METADATA: exact categorical / name filter, list the records. ---
     if plan and plan["route"] == "metadata":
         field, value = plan["field"], plan["value"]
         results = store.get(where={field: value})
@@ -286,55 +350,55 @@ def _execute_plan(plan, question: str, store, k: int, debug: bool, reason: str =
     return docs, {"route": "semantic", "question": q}
 
 
-# ============================================================================
-# QUERY DECOMPOSITION (Phase 8a — the playground finding)
-# ----------------------------------------------------------------------------
-# A compound question ("count people under Aditya AND who is Vivek Sharma?") has
-# TWO intents, but llm_route() returns ONE plan — so one half was always dropped.
-# Fix: split the question into standalone sub-questions, route EACH through the
-# SAME llm_route()/resolve_value() guardrail, then stitch the sub-answers.
-#
-# Bonus: this also kills the fabricated-count bug. A bogus "under Vihaan" becomes
-# its own sub-question; llm_route proposes {aggregate, manager, "Vihaan"};
-# resolve_value fails to snap it to a real manager -> None -> per-sub fallback to
-# detect_filter -> semantic. It can NEVER reach the grand-total escape hatch.
-#
-# COST NOTE (teaching): a compound question now costs 1 decompose + N route +
-# N phrasing + 1 stitch LLM calls. Fine for a learning codebase; a cheaper variant
-# would skip the stitch and just join sub-answers with blank lines.
-# ============================================================================
+def _aggregate(agg: str, nums: list[float]):
+    """Compute a numeric aggregate in Python (never trust the LLM to do math)."""
+    if not nums:
+        return None
+    if agg == "avg":
+        return round(sum(nums) / len(nums), 2)
+    if agg == "min":
+        return min(nums)
+    if agg == "max":
+        return max(nums)
+    if agg == "sum":
+        return sum(nums)
+    return len(nums)
 
+
+def _range_where(field, op, val, val2=None):
+    """Build a Chroma `where` clause for a range comparison on numeric/date metadata."""
+    if op == "between" and val2 is not None:
+        lo, hi = sorted([val, val2])
+        return {"$and": [{field: {"$gte": lo}}, {field: {"$lte": hi}}]}
+    opmap = {">": "$gt", "<": "$lt", ">=": "$gte", "<=": "$lte"}
+    return {field: {opmap.get(op, "$gt"): val}}
+
+
+# ============================================================================
+# QUERY DECOMPOSITION (Phase 8a) — unchanged logic, now schema-aware sub-routing
+# ============================================================================
 def _decompose_system_prompt() -> str:
     return (
-        "You split a user's question into independent sub-questions for an "
-        "employee database.\n"
+        "You split a user's question into independent sub-questions for a table of records.\n"
         "If the question asks for SEVERAL independent things, return a JSON list of "
         "self-contained sub-questions. If it asks ONE thing, return a 1-element list.\n"
         "Each sub-question MUST stand alone: resolve shared verbs and pronouns so it "
-        "reads on its own (e.g. 'count people under Aditya and who is Vivek' -> "
-        '["how many people work under Aditya?", "who is Vivek?"]).\n'
+        "reads on its own.\n"
         "Reply with ONLY a JSON list of strings, nothing else."
     )
 
 
-def llm_decompose(question: str, known: dict[str, list[str]]) -> list[str] | None:
-    """Split a compound question into standalone sub-questions.
-
-    Returns ["<sub-q>", ...] (length 1 for a simple question), or None on any
-    failure (gate down / bad JSON) so the caller falls back to the single path.
-    """
+def llm_decompose(question: str) -> list[str] | None:
+    """Split a compound question into standalone sub-questions (length 1 for simple),
+    or None on any failure so the caller falls back to the single path."""
     try:
         from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(
-            base_url="http://localhost:8080/v1", api_key="unused",
-            model="claude-sonnet-5", temperature=0,
-        )
-        reply = llm.invoke(
-            [("system", _decompose_system_prompt()), ("human", question)]
-        ).content
+        llm = ChatOpenAI(base_url="http://localhost:8080/v1", api_key="unused",
+                         model="claude-sonnet-5", temperature=0)
+        reply = llm.invoke([("system", _decompose_system_prompt()),
+                            ("human", question)]).content
     except Exception:
-        return None  # gate unreachable -> caller uses single path
-
+        return None
     start, end = reply.find("["), reply.rfind("]")
     if start == -1 or end == -1:
         return None
@@ -346,62 +410,51 @@ def llm_decompose(question: str, known: dict[str, list[str]]) -> list[str] | Non
     return subs or None
 
 
-def llm_route_many(question: str, known: dict[str, list[str]]) -> list[dict] | None:
-    """Decompose, then route EACH sub-question with the existing llm_route().
-
-    Returns a list of sub-plans (each tagged with plan['question'] = its own text),
-    or None to signal "not compound" -> caller uses the unchanged single-plan path.
-    Per-sub fallback mirrors the single path: llm_route -> detect_filter -> semantic.
-    """
-    subs = llm_decompose(question, known)
+def llm_route_many(question: str, known: dict[str, list[str]], schema) -> list[dict] | None:
+    """Decompose, then route EACH sub-question with the schema-driven llm_route().
+    Per-sub fallback mirrors the single path: llm_route -> detect_filter -> semantic."""
+    subs = llm_decompose(question)
     if not subs or len(subs) == 1:
-        return None  # simple question -> let the caller run the normal single path
-
+        return None
     plans = []
     for sub in subs:
-        plan = llm_route(sub, known)             # reuse the guardrail, per sub
+        plan = llm_route(sub, known, schema) if schema is not None else None
         if plan is None:
-            hit = detect_filter(sub, known)      # rule-based fallback, per sub
-            if hit:
-                plan = {"route": "metadata", "field": hit[0], "value": hit[1]}
-            else:
-                plan = {"route": "semantic"}     # fuzzy fallback, per sub
-        plan["question"] = sub                   # each sub carries its own text
+            hit = detect_filter(sub, known)
+            plan = {"route": "metadata", "field": hit[0], "value": hit[1]} if hit \
+                else {"route": "semantic"}
+        plan["question"] = sub
         plans.append(plan)
     return plans
 
 
 def retrieve_multi(question: str, store=None, k: int = 4, debug: bool = True,
                    use_llm: bool = True) -> list[dict]:
-    """Return a list of {"plan", "docs"} sub-results.
-
-    - Simple / non-compound question -> a 1-element list wrapping the EXISTING
-      retrieve_with_plan() result, so single-question behavior is unchanged.
-    - Compound question -> one sub-result per sub-plan, each executed independently
-      through the same _execute_plan() as the single path.
-    """
+    """Return a list of {"plan","docs"} sub-results (1 element for a simple question)."""
     if store is None:
         store = get_store()
+    schema = get_schema()
 
-    plans = llm_route_many(question, _known_values(store)) if use_llm else None
+    plans = None
+    if use_llm and schema is not None:
+        plans = llm_route_many(question, _known_values(store, schema), schema)
 
-    if not plans:  # not compound (or gate down) -> unchanged single path
+    if not plans:  # not compound (or gate down / no schema) -> single path
         docs, plan = retrieve_with_plan(question, store=store, k=k, debug=debug,
-                                        use_llm=use_llm)
+                                        use_llm=use_llm, schema=schema)
         return [{"plan": plan, "docs": docs}]
 
     if debug:
         print(f"  [decompose] {len(plans)} sub-questions")
     results = []
     for p in plans:
-        docs, plan = _execute_plan(p, p["question"], store, k, debug, reason="sub")
+        docs, plan = _execute_plan(p, p["question"], store, k, debug, reason="sub", schema=schema)
         results.append({"plan": plan, "docs": docs})
     return results
 
 
-
 def retrieve(question: str, store=None, k: int = 4, debug: bool = True, use_llm: bool = True):
-    """Backwards-compatible wrapper: return just the docs (used by __main__ and older callers)."""
+    """Backwards-compatible wrapper: return just the docs."""
     docs, _plan = retrieve_with_plan(question, store=store, k=k, debug=debug, use_llm=use_llm)
     return docs
 
@@ -417,8 +470,10 @@ def _get_result_to_docs(results: dict):
 
 if __name__ == "__main__":
     store = get_store()
-    print("Hybrid retrieval — type a question ('q' to quit).")
-    print("Try: 'who reports to Dhruv Sharma?'  vs  'who keeps the network reliable?'\n")
+    schema = get_schema()
+    if schema:
+        print(schema.describe(), "\n")
+    print("Hybrid retrieval — type a question ('q' to quit).\n")
     while True:
         question = input("Question: ")
         if question.lower() == "q":
@@ -426,6 +481,6 @@ if __name__ == "__main__":
         docs = retrieve(question, store=store)
         for d in docs:
             m = d.metadata
-            print(f"    - {m['name']:22s} | mgr={m['manager']:16s} "
-                  f"| proj={m['project']:16s} | {m['technology']}")
+            print(f"    - {str(m.get('name')):24s} | "
+                  f"{ {k: v for k, v in m.items() if k != 'name'} }")
         print()

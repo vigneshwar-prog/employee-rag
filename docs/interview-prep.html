@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Interview Prep — Employee RAG Project</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+:root{
+  --bg:#0a0e17;--surf:#101725;--ink:#e9eefb;--mut:#93a3c2;--dim:#63738f;
+  --line:rgba(140,170,230,.15);
+  --blue:#5b9dff;--cyan:#22d3ee;--green:#34d399;--viol:#a78bfa;
+  --amber:#fbbf24;--rose:#fb7185;--ok:#2dd4a7;--bad:#f43f5e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;
+  line-height:1.65;-webkit-font-smoothing:antialiased;padding-bottom:80px}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(900px 500px at 15% -5%,rgba(91,157,255,.16),transparent 60%),
+             radial-gradient(800px 500px at 90% 5%,rgba(167,139,250,.12),transparent 60%)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
+
+/* header */
+header{padding:64px 0 38px;border-bottom:1px solid var(--line);margin-bottom:40px}
+.tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:3px;
+  font-weight:800;color:var(--cyan);border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.07);
+  padding:6px 14px;border-radius:8px;margin-bottom:20px}
+h1{font-size:clamp(34px,5vw,54px);font-weight:900;letter-spacing:-1.6px;line-height:1.05;
+  background:linear-gradient(96deg,#fff,#bcd6ff 45%,#a78bfa 78%,#22d3ee);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{margin-top:16px;font-size:18px;color:var(--mut);max-width:760px}
+.stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:26px}
+.stat{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;
+  padding:12px 18px;min-width:118px}
+.stat .n{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.stat .l{font-size:11.5px;color:var(--dim);font-family:'JetBrains Mono',monospace;
+  letter-spacing:1.4px;margin-top:3px}
+
+/* toc */
+.toc{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:24px 28px;margin-bottom:48px}
+.toc h2{font-size:13px;font-family:'JetBrains Mono',monospace;letter-spacing:2.5px;color:var(--dim);
+  font-weight:800;margin-bottom:16px}
+.toc ol{list-style:none;counter-reset:t}
+.toc li{counter-increment:t;padding:8px 0;border-bottom:1px dashed rgba(140,170,230,.1);
+  display:flex;align-items:center;gap:14px}
+.toc li:last-child{border:0}
+.toc li::before{content:'Q' counter(t);font-family:'JetBrains Mono',monospace;font-size:12px;
+  font-weight:800;color:#0a0f1a;background:var(--blue);border-radius:6px;padding:3px 8px;flex:0 0 auto}
+.toc a{color:var(--ink);text-decoration:none;font-weight:600;font-size:15.5px}
+.toc a:hover{color:var(--cyan)}
+.toc .gr{margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;
+  padding:3px 10px;border-radius:99px;font-weight:800;letter-spacing:.5px}
+
+/* grade pills */
+.g-strong{background:rgba(45,212,167,.14);color:#5ce0bb;border:1px solid rgba(45,212,167,.35)}
+.g-partial{background:rgba(251,191,36,.14);color:#fcd34d;border:1px solid rgba(251,191,36,.35)}
+.g-wrong{background:rgba(244,63,94,.14);color:#fb7185;border:1px solid rgba(244,63,94,.35)}
+.g-pending{background:rgba(140,170,230,.1);color:#93a3c2;border:1px solid var(--line)}
+
+/* question blocks */
+.q{background:var(--surf);border:1px solid var(--line);border-radius:18px;padding:0;
+  margin-bottom:36px;overflow:hidden;scroll-margin-top:20px}
+.q-head{padding:24px 30px;border-bottom:1px solid var(--line);
+  background:linear-gradient(160deg,rgba(255,255,255,.035),transparent)}
+.q-meta{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.qn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;color:#0a0f1a;
+  background:var(--ac,var(--blue));padding:4px 11px;border-radius:7px}
+.qcat{font-size:11.5px;font-family:'JetBrains Mono',monospace;letter-spacing:1.6px;color:var(--dim)}
+.grade{margin-left:auto;font-size:11px;font-family:'JetBrains Mono',monospace;
+  padding:4px 12px;border-radius:99px;font-weight:800;letter-spacing:.6px}
+.q-head h3{font-size:21px;font-weight:750;letter-spacing:-.4px;line-height:1.4;color:#fff}
+.q-body{padding:26px 30px 30px}
+
+.sec{margin-bottom:26px}
+.sec:last-child{margin-bottom:0}
+.sec-t{display:flex;align-items:center;gap:10px;font-size:12px;font-family:'JetBrains Mono',monospace;
+  letter-spacing:2px;font-weight:800;color:var(--sc,var(--blue));margin-bottom:12px}
+.sec-t::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+p{margin-bottom:13px;color:#c3d0e8;font-size:15.5px}
+p:last-child{margin-bottom:0}
+strong{color:#fff;font-weight:700}
+em{color:#bcd6ff;font-style:italic}
+
+.yours{background:rgba(251,191,36,.06);border-left:3px solid var(--amber);
+  border-radius:0 12px 12px 0;padding:16px 20px;font-size:15px;color:#d6c9a8;font-style:italic}
+.key{background:linear-gradient(100deg,rgba(45,212,167,.11),transparent);
+  border-left:3px solid var(--ok);border-radius:0 12px 12px 0;padding:18px 22px;
+  font-size:16.5px;color:#dff5ec;font-weight:600;line-height:1.55}
+.warn{background:rgba(244,63,94,.07);border-left:3px solid var(--bad);
+  border-radius:0 12px 12px 0;padding:16px 20px;font-size:15px;color:#f0cdd4}
+.say{background:linear-gradient(100deg,rgba(91,157,255,.1),transparent);
+  border:1px solid rgba(91,157,255,.25);border-radius:14px;padding:20px 24px;
+  font-size:15.5px;color:#dbe7ff;line-height:1.7}
+.say::before{content:'SAY IT LIKE THIS';display:block;font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;letter-spacing:2.4px;color:var(--blue);font-weight:800;margin-bottom:12px}
+
+ul.li,ol.li{list-style:none;margin:12px 0}
+ul.li li{padding:7px 0 7px 24px;position:relative;color:#c3d0e8;font-size:15.5px}
+ul.li li::before{content:'▸';position:absolute;left:4px;color:var(--ac,var(--blue));font-size:13px;top:7px}
+ul.li.bad li::before{content:'✕';color:var(--bad);font-size:12px}
+ul.li.good li::before{content:'✓';color:var(--ok);font-size:13px}
+ol.li{counter-reset:o}
+ol.li li{counter-increment:o;padding:9px 0 9px 34px;position:relative;color:#c3d0e8;font-size:15.5px}
+ol.li li::before{content:counter(o);position:absolute;left:0;top:10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;font-weight:800;color:#0a0f1a;background:var(--ac,var(--blue));
+  width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+
+code{font-family:'JetBrains Mono',monospace;font-size:13.5px;background:rgba(140,170,230,.11);
+  border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;color:#a8d8ff}
+pre{background:#070b12;border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+  overflow-x:auto;margin:14px 0}
+pre code{background:none;border:0;padding:0;font-size:13px;line-height:1.7;color:#c8d6f0}
+.c-com{color:#5a6b88}.c-key{color:#c792ea}.c-str{color:#8ff0c8}.c-fn{color:#82aaff}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px}
+th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1.6px;
+  color:var(--dim);font-weight:800;padding:0 14px 11px;border-bottom:1px solid var(--line)}
+td{padding:12px 14px;border-bottom:1px solid rgba(140,170,230,.08);color:#c3d0e8;vertical-align:top}
+tr:last-child td{border:0}
+td:first-child{font-weight:650;color:#fff}
+
+.file{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);
+  display:inline-flex;align-items:center;gap:7px;margin-bottom:8px}
+.file::before{content:'📄'}
+.pend{background:rgba(167,139,250,.07);border:1px dashed rgba(167,139,250,.3);
+  border-radius:12px;padding:16px 20px;font-size:14.5px;color:#c9b8f0}
+
+footer{margin-top:60px;padding-top:28px;border-top:1px solid var(--line);
+  font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--dim);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+@media print{body{background:#fff;color:#000}.q{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="tag">INTERVIEW PREP · SESSION 01</div>
+  <h1>Employee RAG — Interview Question Bank</h1>
+  <p class="lede">Graded answers, corrections, and rehearsed talking points for the hybrid RAG system
+  built over <code>data/employees.xlsx</code> — 97 employees, schema-agnostic routing, Chroma + MiniLM.</p>
+  <div class="stats">
+    <div class="stat"><div class="n">6</div><div class="l">QUESTIONS</div></div>
+    <div class="stat"><div class="n">1</div><div class="l">ANSWERED</div></div>
+    <div class="stat"><div class="n">Partial</div><div class="l">CURRENT GRADE</div></div>
+    <div class="stat"><div class="n">97</div><div class="l">RECORDS</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">ROUTES</div></div>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>CONTENTS</h2>
+  <ol>
+    <li><a href="#q1">Project walkthrough — why hybrid retrieval?</a><span class="gr g-partial">PARTIAL</span></li>
+    <li><a href="#q2">The counting trap — why raising K doesn't help</a><span class="gr g-pending">MODEL ANS</span></li>
+    <li><a href="#q3">The fuzzy-snap guardrail at 0.6</a><span class="gr g-pending">MODEL ANS</span></li>
+    <li><a href="#q4">"Why not just use pandas or SQL?"</a><span class="gr g-pending">MODEL ANS</span></li>
+    <li><a href="#q5">Categorical vs. freetext classification</a><span class="gr g-pending">MODEL ANS</span></li>
+    <li><a href="#q6">Scaling to 5M records @ 200ms p95</a><span class="gr g-pending">MODEL ANS</span></li>
+    <li><a href="#qDiagram">System architecture diagram</a><span class="gr g-strong">REFERENCE</span></li>
+  </ol>
+</nav>
+
+<!-- ============ DIAGRAM ============ -->
+<section class="q" id="qDiagram" style="--ac:var(--cyan)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">MAP</span><span class="qcat">REFERENCE · FULL PIPELINE</span>
+      <span class="grade g-strong">REFERENCE</span></div>
+    <h3>System Architecture Diagram — ingestion pipeline (Excel → chunk → embed → vector store) feeding
+    into the query pipeline (question → route → guardrail → retrieve → augment → generate → cite).</h3>
+  </div>
+  <div class="q-body">
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--cyan)">HAND-DRAWN OVERVIEW</div>
+      <div style="background:#fffdf6;border-radius:16px;padding:10px;border:1px solid var(--line)">
+
+<svg viewBox="0 0 1300 640" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe Print','Bradley Hand','Comic Sans MS',cursive" style="width:100%;height:auto;display:block">
+  <defs>
+    <filter id="sketchy" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.03" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="sketchy2" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.04" numOctaves="2" seed="42" result="noise2"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise2" scale="4.5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L8,3.5 L0,7 Z" fill="#1a1a1a"/>
+    </marker>
+  </defs>
+
+  <!-- card background -->
+  <rect x="0" y="0" width="1300" height="640" rx="18" fill="#fffdf6"/>
+
+  <!-- lane labels -->
+  <text x="30" y="28" font-size="16" font-weight="700" fill="#b45309">Ingestion Pipeline</text>
+  <text x="30" y="330" font-size="16" font-weight="700" fill="#7c3aed">Query Pipeline</text>
+  <line x1="20" y1="300" x2="1280" y2="300" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="3 6" opacity=".35" filter="url(#sketchy2)"/>
+
+  <!-- ============ INGESTION ROW (y ~48-160) ============ -->
+
+  <!-- box 0: user upload -->
+  <text x="250" y="46" font-size="13" fill="#1a1a1a" text-anchor="middle">User input</text>
+  <g filter="url(#sketchy)">
+    <rect x="170" y="52" width="160" height="86" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="250" y="82" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">Upload employees</text>
+  <text x="250" y="99" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">.xlsx</text>
+  <text x="250" y="120" font-size="10.5" fill="#555" text-anchor="middle">formats: .xlsx</text>
+  <text x="250" y="133" font-size="10.5" fill="#555" text-anchor="middle">(Streamlit sidebar)</text>
+
+  <!-- arrow 0->1 -->
+  <path d="M330,95 C348,93 352,97 370,95" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 1: schema inference -->
+  <g filter="url(#sketchy)">
+    <rect x="370" y="52" width="160" height="86" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="450" y="86" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">Schema inference</text>
+  <text x="450" y="108" font-size="10.5" fill="#555" text-anchor="middle">infer_schema() classifies</text>
+  <text x="450" y="122" font-size="10.5" fill="#555" text-anchor="middle">categorical / numeric /</text>
+  <text x="450" y="136" font-size="10.5" fill="#555" text-anchor="middle">date / freetext</text>
+
+  <!-- arrow 1->2 with chunking annotation -->
+  <path d="M530,95 C548,90 552,100 570,95" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+  <text x="550" y="70" font-size="11" fill="#be185d" text-anchor="middle" font-style="italic" transform="rotate(-3 550 70)">chunking</text>
+  <text x="550" y="83" font-size="9.5" fill="#be185d" text-anchor="middle" font-style="italic" transform="rotate(-3 550 83)">(row-per-chunk strategy)</text>
+
+  <!-- box 2: chunking / row as input -->
+  <g filter="url(#sketchy)">
+    <rect x="570" y="52" width="160" height="86" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="650" y="80" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">1. Row as input</text>
+  <text x="650" y="98" font-size="10.5" fill="#555" text-anchor="middle">formats: xlsx columns</text>
+  <text x="650" y="112" font-size="10.5" fill="#555" text-anchor="middle">→ prose "card"</text>
+  <text x="650" y="128" font-size="10" fill="#777" text-anchor="middle" font-style="italic">1 row = 1 chunk</text>
+
+  <!-- arrow 2->3 -->
+  <path d="M730,95 C748,92 752,98 770,95" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 3: embedding -->
+  <g filter="url(#sketchy)">
+    <rect x="770" y="52" width="160" height="86" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="850" y="82" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">Embedding</text>
+  <text x="850" y="103" font-size="10.5" fill="#555" text-anchor="middle">all-MiniLM-L6-v2</text>
+  <text x="850" y="117" font-size="10.5" fill="#555" text-anchor="middle">384-dim · CPU · offline</text>
+
+  <!-- arrow 3->4 -->
+  <path d="M930,95 C948,91 952,99 970,95" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 4: vector store -->
+  <g filter="url(#sketchy)">
+    <rect x="970" y="52" width="160" height="86" rx="14" fill="#fff7e6" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="1050" y="80" font-size="13.5" font-weight="700" fill="#111" text-anchor="middle">Vector store</text>
+  <text x="1050" y="100" font-size="10.5" fill="#555" text-anchor="middle">Chroma → ./chroma_db</text>
+  <text x="1050" y="114" font-size="10.5" fill="#555" text-anchor="middle">collection "employees"</text>
+  <text x="1050" y="128" font-size="10" fill="#777" text-anchor="middle" font-style="italic">+ schema.json</text>
+
+  <!-- feed connector from vector store down into retrieval box (query lane) -->
+  <path d="M1050,140 C1060,220 720,300 640,378" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-dasharray="1 7" stroke-linecap="round" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+  <text x="870" y="255" font-size="11" fill="#7c3aed" text-anchor="middle" font-style="italic" transform="rotate(-8 870 255)">feeds retrieval</text>
+
+  <!-- ============ QUERY ROW (y ~358-490) ============ -->
+
+  <!-- box 0: user question -->
+  <g filter="url(#sketchy)">
+    <rect x="20" y="358" width="140" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="90" y="384" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">User question</text>
+  <text x="90" y="406" font-size="10" fill="#555" text-anchor="middle">"how many people</text>
+  <text x="90" y="419" font-size="10" fill="#555" text-anchor="middle">work on MPLS?"</text>
+  <text x="90" y="437" font-size="9.5" fill="#777" text-anchor="middle" font-style="italic">main.py / app.py</text>
+
+  <path d="M160,406 C172,402 176,410 180,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 1: LLM router -->
+  <g filter="url(#sketchy)">
+    <rect x="180" y="358" width="140" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="250" y="384" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">LLM Router</text>
+  <text x="250" y="404" font-size="10" fill="#555" text-anchor="middle">question + schema</text>
+  <text x="250" y="417" font-size="10" fill="#555" text-anchor="middle">→ JSON route</text>
+  <text x="250" y="435" font-size="9.5" fill="#777" text-anchor="middle" font-style="italic">local Claude gate</text>
+
+  <path d="M320,406 C332,402 336,410 340,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 2: guardrail -->
+  <g filter="url(#sketchy)">
+    <rect x="340" y="358" width="140" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="410" y="384" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Guardrail</text>
+  <text x="410" y="404" font-size="10" fill="#555" text-anchor="middle">fuzzy-snap to real</text>
+  <text x="410" y="417" font-size="10" fill="#555" text-anchor="middle">value (≥0.6) or</text>
+  <text x="410" y="430" font-size="10" fill="#555" text-anchor="middle">rule-based fallback</text>
+
+  <path d="M480,406 C492,402 496,410 500,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 3: retrieval (branches) - taller -->
+  <g filter="url(#sketchy)">
+    <rect x="500" y="348" width="150" height="116" rx="14" fill="#eef4ff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="575" y="368" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Retrieval</text>
+  <g filter="url(#sketchy2)">
+    <rect x="512" y="376" width="60" height="20" rx="8" fill="#fff" stroke="#1a1a1a" stroke-width="1.4"/>
+    <rect x="578" y="376" width="60" height="20" rx="8" fill="#fff" stroke="#1a1a1a" stroke-width="1.4"/>
+    <rect x="512" y="400" width="60" height="20" rx="8" fill="#fff" stroke="#1a1a1a" stroke-width="1.4"/>
+    <rect x="578" y="400" width="60" height="20" rx="8" fill="#fff" stroke="#1a1a1a" stroke-width="1.4"/>
+  </g>
+  <text x="542" y="390" font-size="9" fill="#111" text-anchor="middle">semantic</text>
+  <text x="608" y="390" font-size="9" fill="#111" text-anchor="middle">metadata</text>
+  <text x="542" y="414" font-size="9" fill="#111" text-anchor="middle">range</text>
+  <text x="608" y="414" font-size="9" fill="#111" text-anchor="middle">aggregate</text>
+  <text x="575" y="450" font-size="9.5" fill="#777" text-anchor="middle" font-style="italic">branch by route</text>
+
+  <path d="M650,406 C662,401 666,411 670,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 4: augmentation -->
+  <g filter="url(#sketchy)">
+    <rect x="670" y="358" width="150" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="745" y="382" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Augmentation</text>
+  <text x="745" y="402" font-size="9.5" fill="#555" text-anchor="middle">context cards +</text>
+  <text x="745" y="414" font-size="9.5" fill="#555" text-anchor="middle">anti-hallucination rules</text>
+  <text x="745" y="426" font-size="9.5" fill="#555" text-anchor="middle">+ chat history</text>
+
+  <path d="M820,406 C832,402 836,410 840,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 5: generation -->
+  <g filter="url(#sketchy)">
+    <rect x="840" y="358" width="140" height="96" rx="14" fill="#fff7e6" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="910" y="384" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Generation</text>
+  <text x="910" y="404" font-size="10" fill="#555" text-anchor="middle">local Claude gate</text>
+  <text x="910" y="417" font-size="10" fill="#555" text-anchor="middle">claude-sonnet-5</text>
+  <text x="910" y="435" font-size="9.5" fill="#777" text-anchor="middle" font-style="italic">grounded answer</text>
+
+  <path d="M980,406 C992,402 996,410 1000,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 6: citation filter -->
+  <g filter="url(#sketchy)">
+    <rect x="1000" y="358" width="140" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="1070" y="384" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Citation filter</text>
+  <text x="1070" y="404" font-size="9.5" fill="#555" text-anchor="middle">keep only sources</text>
+  <text x="1070" y="417" font-size="9.5" fill="#555" text-anchor="middle">actually mentioned</text>
+
+  <path d="M1140,406 C1152,402 1156,410 1160,406" fill="none" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrowhead)" filter="url(#sketchy2)"/>
+
+  <!-- box 7: output -->
+  <g filter="url(#sketchy)">
+    <rect x="1160" y="358" width="120" height="96" rx="14" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.2"/>
+  </g>
+  <text x="1220" y="390" font-size="12.5" font-weight="700" fill="#111" text-anchor="middle">Output</text>
+  <text x="1220" y="410" font-size="9.5" fill="#555" text-anchor="middle">answer + sources</text>
+  <text x="1220" y="423" font-size="9.5" fill="#555" text-anchor="middle">to user</text>
+
+  <!-- little squiggle underline flourish under title of retrieval to feel hand-drawn -->
+  <path d="M535,470 C555,474 595,468 615,472" fill="none" stroke="#1a1a1a" stroke-width="1.4" opacity=".4" filter="url(#sketchy2)"/>
+</svg>
+
+      </div>
+      <p style="margin-top:14px;font-size:13.5px">Top lane is ingestion: an uploaded spreadsheet gets a
+      column-by-column schema classification, then each row becomes its own chunk (one prose "card" per
+      employee), gets embedded locally, and lands in a persistent Chroma store. Bottom lane is the query
+      path: a question is routed to one of four retrieval strategies, guarded against hallucinated filter
+      values, retrieved, augmented into a grounded prompt, generated by the same local Claude gate, and
+      trimmed to only the citations actually used before reaching the user. The dashed diagonal shows the
+      vector store from ingestion directly feeding the retrieval step in the query pipeline — the two lanes
+      share one store.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Q1 ============ -->
+<section class="q" id="q1" style="--ac:var(--blue)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q1</span><span class="qcat">DESIGN RATIONALE · OPENER</span>
+      <span class="grade g-partial">PARTIAL</span></div>
+    <h3>Walk me through your project in 60 seconds. Why a <em>hybrid</em> retriever instead of pure vector
+    search? Give a query semantic search gets wrong — and explain <em>why</em> the embedding fails on it.</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--amber)">YOUR ANSWER</div>
+      <div class="yours">"RAG pipeline to fetch employee data — project, manager, techstack. Data ingestion
+      from Excel, each employee card as a single chunk, embedding with all-minilm-l2v2, stored vectors in
+      vector DB. For retrieval I used semantic search plus metadata filtering, then used retrieved data to
+      generate a grounded response. Vector search doesn't work well with quantifying numbers such as
+      'give me the count of employees' or 'give me the list of MPLS employees' — there metadata filtering
+      works good. It fails because the embedding model can just give first k matching semantic results,
+      so it cannot count values."</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">WHAT YOU GOT RIGHT</div>
+      <ul class="li good">
+        <li><strong>Pipeline sequence was accurate and well-ordered</strong> — ingestion → chunk → embed →
+        store → hybrid retrieve → grounded generate. Said alone, this passes.</li>
+        <li><strong>Chunking choice is defensible.</strong> One employee = one chunk = one atomic entity
+        means no person's facts split across a boundary. Frame it as a <em>decision</em>, not a default.</li>
+        <li><strong>The core insight is present</strong> — you know counting and complete-list queries need
+        filtering, not similarity. That's the thesis of the project and you led with it.</li>
+      </ul>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">GAP 1 — MODEL NAME</div>
+      <p>You said <code>all-minilm-l2v2</code>. It is <code>all-MiniLM-L6-v2</code>. The <strong>L6 = 6
+      transformer layers</strong>. Small slip, but model names are a credibility signal — fumbling it reads
+      as "copied from a tutorial." Keep the justification loaded:</p>
+      <div class="key">384 dimensions, runs on CPU with no API cost, and for 97 short cards the quality gap
+      versus a large embedding model is negligible.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">GAP 2 — YOU GAVE THE SYMPTOM, NOT THE MECHANISM</div>
+      <p>"It gives the first k matching results so it cannot count" describes <em>what happens</em>. The
+      interviewer's next word is <strong>"but why?"</strong> Two mechanisms answer it:</p>
+      <div class="key">① Vector search is a <strong>top-K nearest-neighbour</strong> operation. K is a
+      parameter you fix <em>before</em> you know the answer. Counting requires a <strong>complete</strong>
+      set. You cannot get a complete set from an operation whose size you had to choose in advance.</div>
+      <p style="margin-top:14px">And the deeper one, which separates a strong candidate from an average one:</p>
+      <div class="key">② Embeddings encode <strong>topical similarity</strong>, not <strong>attribute
+      equality</strong>. A card reading <code>"Manager is Dhruv Sharma"</code> and one reading
+      <code>"Manager is Anika Sharma"</code> sit very close in vector space — both are short prose about a
+      manager. The embedding captures <em>"this is a sentence about management"</em>; it does not encode
+      <em>"this string equals Dhruv."</em> Exact identity is a <strong>symbolic</strong> property, and dense
+      vectors are lossy compression that discards symbolic precision.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--viol)">GAP 3 — YOUR TWO EXAMPLES ARE DIFFERENT FAILURES</div>
+      <p>You grouped "count" and "list all MPLS" together. They're related but distinct — separating them
+      demonstrates precision:</p>
+      <table>
+        <thead><tr><th style="width:30%">QUERY TYPE</th><th style="width:40%">WHAT BREAKS</th><th>YOUR ROUTE</th></tr></thead>
+        <tbody>
+          <tr><td>"List everyone on MPLS"</td><td><strong>Completeness</strong> — K truncates the set</td>
+              <td><code>metadata</code> → Chroma <code>where</code></td></tr>
+          <tr><td>"How many on MPLS?"</td><td>Completeness <strong>+ arithmetic</strong> — LLMs miscount lists</td>
+              <td><code>aggregate</code> → <code>len()</code> in Python</td></tr>
+        </tbody>
+      </table>
+      <p>The second needs an extra guarantee: even handed all 12 cards, an LLM asked to count can say 11.
+      That is why <code>_aggregate()</code> computes in Python and passes the finished number to the model.
+      Your own code comment is the best line here — <em>"never trust the LLM to do math."</em></p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--blue)">REHEARSED VERSION</div>
+      <div class="say">"It's a natural-language Q&amp;A system over an employee spreadsheet — 97 people,
+      with columns for manager, project, and technology. Each row becomes one chunk: a readable card like
+      <em>'Vigneshwar B — Manager is X; Project is Y'</em>, embedded with all-MiniLM-L6-v2 into a persistent
+      Chroma store.<br><br>
+      The core design decision is that retrieval is <strong>hybrid</strong>, not pure vector search. A router
+      classifies each question into one of four routes — semantic, metadata filter, aggregate, or range.<br><br>
+      The reason is that <strong>vector search is top-K nearest-neighbour, and K is fixed before you know the
+      answer.</strong> Ask <em>'how many people work on MPLS?'</em> and semantic search with k=4 returns four
+      MPLS employees, and the LLM confidently reports 'four' — when the real answer is twelve. It's not just
+      wrong, it's <em>silently</em> wrong, which is worse. And you can't fix it by raising K: at 97 rows k=100
+      returns everyone sorted by similarity, so the LLM has to guess where relevance ends — and it doesn't
+      generalize past this dataset anyway.<br><br>
+      So those queries take an exact metadata <code>where</code> filter, which returns the complete set, and
+      the count is computed in Python. The LLM never does arithmetic — it only phrases the result."</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Q2 ============ -->
+<section class="q" id="q2" style="--ac:var(--cyan)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q2</span><span class="qcat">TRAP QUESTION · FAILURE ANALYSIS</span>
+      <span class="grade g-pending">MODEL ANSWER</span></div>
+    <h3>Remove the aggregate route and send <em>"how many people work on MPLS?"</em> to plain semantic
+    search with k=4. What comes back, why is it <em>especially</em> dangerous — and why can't you fix it
+    by raising k to 100?</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">PART A — THE DANGER IS THE SILENCE</div>
+      <div class="key">It fails <strong>silently and plausibly</strong>. If retrieval returned nothing, the
+      user sees an error and knows to distrust it. But semantic search with k=4 cheerfully returns four MPLS
+      employees, and the LLM answers <em>"4 people work on MPLS"</em> — fluent, confident, well-formatted,
+      and wrong. The real number might be 12.</div>
+      <p style="margin-top:14px">There is no error, no warning, no signal for the user to catch. <strong>A
+      confidently wrong number is worse than no answer</strong>, because it destroys trust in every other
+      answer the system gives — including the correct ones.</p>
+      <div class="warn"><strong>Interview framing:</strong> the failure mode that matters in production isn't
+      the one that throws — it's the one that returns something plausible. Say that, and you sound like
+      someone who has operated a system, not just built one.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--amber)">PART B — WHY k=100 IS NOT A FIX</div>
+      <p>Two independent reasons, either one fatal:</p>
+      <ol class="li" style="--ac:var(--amber)">
+        <li><strong>Rank ≠ match.</strong> With 97 employees, k=100 returns <em>all 97</em>, sorted by
+        similarity. Every non-MPLS employee is in there too, just ranked lower. The LLM now has to decide
+        where relevance stops, and nothing in the data marks that boundary. You've moved the counting problem
+        from the retriever into the LLM — the one component you must never trust with a precise count.</li>
+        <li><strong>It doesn't generalize.</strong> k=100 works only because you happen to have 97 rows. At
+        100,000 employees you'd need k=100000, which is a full table scan with an embedding step bolted on —
+        slower and strictly worse than the filter you should have used.
+        <strong>If your fix breaks when the data grows 10×, it isn't a fix.</strong></li>
+      </ol>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">WHAT YOUR CODE ACTUALLY DOES</div>
+      <div class="file">src/retrieval.py · _execute_plan()</div>
+      <pre><code><span class="c-com"># AGGREGATE: count. Python owns the number.</span>
+results = store.<span class="c-fn">get</span>(where={field: value}) <span class="c-key">if</span> field <span class="c-key">else</span> store.<span class="c-fn">get</span>()
+docs = <span class="c-fn">_get_result_to_docs</span>(results)
+plan[<span class="c-str">"count"</span>] = <span class="c-fn">len</span>(docs)   <span class="c-com"># ← len(), not the LLM</span></code></pre>
+      <p><code>store.get(where=...)</code> — <strong>not</strong> <code>similarity_search</code>. Chroma's
+      <code>get()</code> takes no <code>k</code> at all; it returns every matching record. That is the whole
+      point, and it's the sentence to say out loud.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Q3 ============ -->
+<section class="q" id="q3" style="--ac:var(--viol)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q3</span><span class="qcat">CODE-LEVEL · GUARDRAIL DESIGN</span>
+      <span class="grade g-pending">MODEL ANSWER</span></div>
+    <h3>In <code>llm_route()</code> the LLM proposes a field and value, but you don't pass that value into
+    the Chroma <code>where</code> clause — you run it through <code>resolve_value()</code> with a 0.6 fuzzy
+    threshold. What failure does that prevent, and what happens below 0.6?</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">THE FAILURE IT PREVENTS</div>
+      <div class="key">The LLM generates a value that is <strong>plausible but not present in the store</strong>.
+      A metadata filter is an <em>exact string match</em> — <code>where={"manager": "Dhruv"}</code> against a
+      stored value of <code>"Dhruv Sharma"</code> matches <strong>zero rows</strong>. The user asked a valid
+      question about a real person and gets "no records found."</div>
+      <p style="margin-top:14px">Typical near-miss shapes the snap repairs:</p>
+      <ul class="li bad">
+        <li>User typo — <em>"dhruv sharmaa"</em> → <code>Dhruv Sharma</code></li>
+        <li>Partial name — <em>"Dhruv"</em> → <code>Dhruv Sharma</code></li>
+        <li>Case / whitespace drift — <em>"mpls"</em> → <code>MPLS</code></li>
+        <li>LLM paraphrase — the model "helpfully" rewrites the value it saw in the prompt</li>
+      </ul>
+      <p>So the guardrail's job is: <strong>the LLM may choose the field and intent, but only the store gets
+      to say what values exist.</strong> Every filter value is snapped back to a real indexed string before
+      it can touch the query.</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--amber)">WHAT HAPPENS BELOW 0.6 — AND WHY</div>
+      <p><code>resolve_value()</code> returns <code>None</code>, <code>llm_route()</code> returns
+      <code>None</code>, and the caller degrades to the rule-based detector, then to
+      <strong>semantic search</strong>.</p>
+      <div class="key">A wrong exact filter returns <strong>zero rows</strong> — a dead end that looks like
+      "this person doesn't exist." Semantic search returns the <strong>k nearest cards</strong>, which are
+      probably in the right neighbourhood. Degrading to a fuzzy-but-populated result beats failing to an
+      empty-but-precise one.</div>
+      <p style="margin-top:14px">The threshold is a deliberate two-sided trade:</p>
+      <table>
+        <thead><tr><th style="width:22%">THRESHOLD</th><th>CONSEQUENCE</th></tr></thead>
+        <tbody>
+          <tr><td>Too low (~0.3)</td><td>Over-eager snapping — <em>"Anika"</em> matches <code>Anita</code>,
+          and you confidently return the <strong>wrong person's</strong> data. Worst outcome of all.</td></tr>
+          <tr><td><strong>0.6</strong></td><td>Catches typos and partial names; rejects genuinely unrelated
+          strings.</td></tr>
+          <tr><td>Too high (~0.9)</td><td>Rejects ordinary typos, so real questions fall through to semantic
+          unnecessarily.</td></tr>
+        </tbody>
+      </table>
+      <div class="warn"><strong>The principle worth naming:</strong> never let a generative model's output
+      reach a database query unvalidated. The LLM is a <em>router</em>, not a source of truth — it picks the
+      strategy, the store owns the vocabulary. That same principle is what stops SQL injection in an LLM
+      text-to-SQL system, and it's the transferable version of this answer.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">THE DEGRADATION LADDER (say this — it shows systems thinking)</div>
+      <ol class="li" style="--ac:var(--ok)">
+        <li><strong>LLM router</strong> — schema-aware, handles paraphrase and intent</li>
+        <li><strong>Rule-based substring scan</strong> — works when the gate is down</li>
+        <li><strong>Semantic search</strong> — always returns something usable</li>
+      </ol>
+      <p>Every layer has a strictly weaker dependency than the one above it. <strong>The system never returns
+      an error because a component was unavailable</strong> — it returns a worse answer instead. That's an
+      availability decision, and interviewers notice when you frame it that way.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Q4 ============ -->
+<section class="q" id="q4" style="--ac:var(--green)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q4</span><span class="qcat">CHALLENGE · JUSTIFY THE ARCHITECTURE</span>
+      <span class="grade g-pending">MODEL ANSWER</span></div>
+    <h3>"Then why keep the vector store at all? Just use pandas — <code>df[df.Project == 'MPLS']</code> — or
+    load it into SQLite. Exact answers, no embedding model, no Chroma, no latency."</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">THE CRACK IN THE CHALLENGE</div>
+      <p>Pandas and SQL answer <strong>exact, structured</strong> queries perfectly:
+      <code>df[df["Project"] == "MPLS"]</code> gives every MPLS employee. But try this:</p>
+      <div class="key"><em>"Who on the team knows automation-ish things?"</em></div>
+      <p style="margin-top:14px">There is no <code>automation</code> column. No
+      <code>WHERE automation = True</code>. The answer lives inside embedded text like
+      <em>"works on network automation scripts, familiar with Ansible"</em> — and only
+      <strong>cosine similarity over embeddings</strong> can surface it. SQL has no operation
+      for "semantically close to this phrase."</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">WHAT THE EMBEDDING CONTRIBUTES THAT STRING MATCHING NEVER CAN</div>
+      <div class="key">String matching requires the exact word. Embeddings understand
+      <strong>semantic proximity</strong> — synonyms, paraphrases, related concepts.
+      <em>"automation-ish"</em> and <em>"Ansible/scripting background"</em> map to nearby
+      vectors in the same space. No SQL predicate can express that relationship.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--viol)">WHY BOTH ARE NEEDED — THE TWO QUESTION SHAPES</div>
+      <table>
+        <thead><tr><th style="width:45%">QUESTION</th><th style="width:30%">Right tool</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>"List everyone on MPLS"</td><td>pandas / SQL / metadata filter</td><td>Exact attribute equality</td></tr>
+          <tr><td>"Who knows automation-ish things?"</td><td>Vector search</td><td>Semantic proximity, no exact column exists</td></tr>
+          <tr><td>"How many people under Dhruv?"</td><td>metadata filter + <code>len()</code></td><td>Completeness + counting</td></tr>
+          <tr><td>"Who has experience similar to Vigneshwar?"</td><td>Vector search</td><td>Similarity across free-text card</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px">Dropping the vector store means the bottom two rows become
+      unanswerable. That is the concrete gap.</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--blue)">SAY IT LIKE THIS</div>
+      <div class="say">"Pandas is faster and simpler for exact structured lookups — I use it for
+      those via the metadata filter route. But the moment the question has no column to match on —
+      <em>'who knows automation-ish things'</em> — SQL has nothing to offer. There's no
+      <code>WHERE</code> for meaning. The embedding model turns the question and every employee card
+      into vectors in the same space, so similarity becomes a distance calculation. Neither tool
+      alone covers both question shapes, which is why the router exists to pick the right one."</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ Q5 ============ -->
+<section class="q" id="q5" style="--ac:var(--rose)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q5</span><span class="qcat">YOUR CODE · PHASE 9 SCHEMA INFERENCE</span>
+      <span class="grade g-pending">MODEL ANSWER</span></div>
+    <h3><code>schema.py</code> sorts every column into identity / categorical / numeric / date / freetext.
+    What rule separates <strong>categorical</strong> from <strong>freetext</strong> — and what breaks if a
+    freetext column is misclassified as categorical?</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">THE RULE — EXACT CODE</div>
+      <p>From <code>src/schema.py</code> — the only two constants that make this decision:</p>
+      <pre><code><span class="c-com"># A column is CATEGORICAL if BOTH are true:</span>
+CATEGORICAL_MAX_DISTINCT = 40     <span class="c-com"># absolute: at most 40 unique values</span>
+CATEGORICAL_MAX_RATIO    = 0.5    <span class="c-com"># relative: distinct/rows below 50%</span>
+
+<span class="c-key">if</span> len(distinct) &lt;= CATEGORICAL_MAX_DISTINCT <span class="c-key">and</span> ratio &lt;= CATEGORICAL_MAX_RATIO:
+    <span class="c-key">return</span> ColumnProfile(name, CATEGORICAL, distinct=distinct)
+
+<span class="c-key">return</span> ColumnProfile(name, FREETEXT)  <span class="c-com"># high-cardinality → semantic only</span></code></pre>
+      <div class="key">The property that makes a column <strong>filterable</strong> is
+      <strong>low cardinality</strong> — few enough distinct values that the system can enumerate
+      them, include them in the LLM router prompt, and snap user input to a known value.
+      High-cardinality prose has no enumerable vocabulary, so it goes to semantic search only.</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">WHAT BREAKS ON MISCLASSIFICATION</div>
+      <p>The router prompt in <code>src/retrieval.py</code> injects every categorical column's
+      distinct values into the LLM's system message on every query:</p>
+      <pre><code>shown = vals[:25] + (["..."] <span class="c-key">if</span> len(vals) &gt; 25 <span class="c-key">else</span> [])
+cat_lines.append(f'  - "{col}" (categorical) values: {shown}')</code></pre>
+      <p>Three cascading failures if a freetext column (e.g. <code>notes</code>, 97 unique values)
+      is misclassified as categorical:</p>
+      <ol class="li" style="--ac:var(--rose)">
+        <li><strong>Prompt bloat.</strong> Up to 97 unique prose strings are injected into every
+        LLM router call — burning tokens and inflating latency on every single query.</li>
+        <li><strong>Broken routing.</strong> The LLM tries to snap user input to one of 97 random
+        prose strings. It hallucinates a match, triggers a metadata <code>where</code> filter,
+        and returns zero results for a perfectly valid question.</li>
+        <li><strong>Semantic path bypassed.</strong> Freetext columns are meant to be searched via
+        embeddings. Once misclassified, the system never uses them semantically — the one path
+        that would actually work is silently cut off.</li>
+      </ol>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--blue)">SAY IT LIKE THIS</div>
+      <div class="say">"A column is categorical when it has few enough distinct values to enumerate —
+      I use an absolute cap of 40 and a ratio cap of 50% of rows. That vocabulary goes into the
+      router's LLM prompt so the model can snap user phrasing to a real stored value. A freetext
+      column fails both thresholds — it has too many distinct values to enumerate, so it's never
+      used as a filter. If you misclassify it as categorical, you inject dozens of prose strings
+      into every prompt, the LLM hallucinates a filter match, and you get zero results — while
+      the semantic path that would have worked sits completely unused."</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ Q6 ============ -->
+<section class="q" id="q6" style="--ac:var(--amber)">
+  <div class="q-head">
+    <div class="q-meta"><span class="qn">Q6</span><span class="qcat">PRODUCTION · SCALE &amp; BOTTLENECKS</span>
+      <span class="grade g-pending">MODEL ANSWER</span></div>
+    <h3>Your system works on 97 employees. You're handed <strong>5 million records</strong> and a
+    <strong>200ms p95 latency budget</strong>. What breaks first, and what do you change?</h3>
+  </div>
+  <div class="q-body">
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--bad)">WHAT BREAKS FIRST — THE ROUTER PROMPT</div>
+      <p>The hint is in <code>_known_values()</code> inside <code>src/retrieval.py</code>:</p>
+      <pre><code><span class="c-com"># At query time, reads ALL metadata from Chroma to build the vocab:</span>
+metas = store.<span class="c-fn">get</span>()["metadatas"]  <span class="c-com"># ← 5 million dicts loaded into RAM</span>
+<span class="c-key">for</span> m <span class="c-key">in</span> metas:
+    <span class="c-key">for</span> k, v <span class="c-key">in</span> m.items():
+        acc.setdefault(k, set()).add(v)</code></pre>
+      <div class="key">At 97 rows this is invisible. At 5 million rows,
+      <strong>every single query</strong> loads 5 million metadata dicts into RAM to rebuild
+      the distinct-values vocabulary. That alone exceeds the 200ms budget before a single
+      embedding or LLM call is made.</div>
+      <p style="margin-top:14px">Then the rebuilt vocabulary — potentially thousands of distinct
+      categorical values — gets injected into the LLM's system prompt. At scale, this
+      overflows the context window entirely.</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--ok)">WHAT YOU CHANGE</div>
+      <table>
+        <thead><tr><th style="width:40%">PROBLEM</th><th>FIX</th></tr></thead>
+        <tbody>
+          <tr><td>Vocab rebuilt from all rows on every query</td>
+              <td>Pre-compute <code>distinct_values</code> at <strong>index time</strong> and
+              persist via <code>schema.save()</code> — already wired in, just not used at
+              query time in the fallback path</td></tr>
+          <tr><td>All distinct values sent to LLM</td>
+              <td>Cap to top-N most frequent per category; the <code>[:25]</code> slice already
+              exists but the underlying load still reads 5M records</td></tr>
+          <tr><td>Chroma at 5M rows</td>
+              <td>Move to a production ANN backend (Qdrant, Weaviate, pgvector) with HNSW
+              indexing — Chroma is not designed for this scale</td></tr>
+          <tr><td>Metadata filter is a full scan</td>
+              <td>Maintain a separate SQL table for structured columns; vector store handles
+              semantic only — split the two concerns at the storage layer</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sec">
+      <div class="sec-t" style="--sc:var(--blue)">SAY IT LIKE THIS</div>
+      <div class="say">"The first thing to break is the router prompt construction.
+      <code>_known_values()</code> currently calls <code>store.get()</code> with no filter at
+      query time — at 97 rows that's negligible, at 5 million it loads millions of dicts into
+      RAM on every single request before anything else runs. The fix is straightforward in
+      principle: the schema inference already saves the vocabulary to disk at index time via
+      <code>schema.save()</code> — I just need the query path to load from that cache instead
+      of rebuilding it live. Beyond that I'd move the vector store to a proper HNSW-indexed
+      backend like Qdrant, and push exact-filter queries to a SQL table so the vector index
+      only handles the semantic path."</div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <span>EMPLOYEE RAG · INTERVIEW PREP · SESSION 01</span>
+  <span>Q1 GRADED · Q2–Q6 MODEL ANSWERS</span>
+</footer>
+
+</div>
+
+<script defer src="file:///Users/vigneshwar/Documents/shared-learning-nav/sidebar-loader.js"></script>
+</body>
+</html>

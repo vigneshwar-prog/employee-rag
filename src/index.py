@@ -39,6 +39,9 @@ from data import load_employee_documents
 # regardless of the current working directory when you run the script.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PERSIST_DIR = str(PROJECT_ROOT / "chroma_db")
+# Where the inferred schema is persisted (Phase 9). Retrieval runs in a separate
+# process from indexing, so it reloads the schema from here instead of re-inferring.
+SCHEMA_PATH = PROJECT_ROOT / "chroma_db" / "schema.json"
 # One logical "table" of vectors inside that store.
 COLLECTION_NAME = "employees"
 # Local embedding model (Phase 0 decision: the gate doesn't serve embeddings).
@@ -59,15 +62,18 @@ def get_embeddings() -> HuggingFaceEmbeddings:
 def build_index() -> Chroma:
     """Excel -> Documents -> embeddings -> persistent Chroma store.
 
-    Uses each employee's name as a STABLE id, so re-running updates the same
+    Uses each row's identity value as a STABLE id, so re-running updates the same
     records instead of appending duplicates (Chroma upserts by id).
+
+    Phase 9: load_employee_documents() now ALSO returns the inferred SchemaProfile;
+    we persist it (schema.json) so the query-time process can route against it.
     """
-    docs = load_employee_documents()
+    docs, schema = load_employee_documents()
     ids = [doc.metadata["name"] for doc in docs]
 
-    # Sanity check: names must be unique for ids to work as upsert keys.
+    # Sanity check: identity values must be unique for ids to work as upsert keys.
     if len(set(ids)) != len(ids):
-        raise ValueError("Duplicate employee names found; ids must be unique.")
+        raise ValueError("Duplicate identity values found; ids must be unique.")
 
     embeddings = get_embeddings()
 
@@ -80,7 +86,16 @@ def build_index() -> Chroma:
         collection_name=COLLECTION_NAME,
         persist_directory=PERSIST_DIR,
     )
+    # Persist the inferred schema next to the vectors so retrieval can reload it.
+    schema.save(SCHEMA_PATH)
     return store
+
+
+def get_schema():
+    """Load the persisted SchemaProfile (Phase 9). Returns None if the index was
+    built before schema persistence existed (callers then infer/fallback)."""
+    from schema import SchemaProfile
+    return SchemaProfile.load(SCHEMA_PATH)
 
 
 def get_store() -> Chroma:
@@ -101,26 +116,22 @@ if __name__ == "__main__":
     store = build_index()
 
     count = store._collection.count()
-    print(f"Indexed {count} employees.")
+    print(f"Indexed {count} records.")
+    schema = get_schema()
+    if schema:
+        print("\n" + schema.describe())
 
     # Prove it works: a purely SEMANTIC search (no metadata filter yet).
-    # We print EVERYTHING the retriever returns for each hit, so what you SEE
-    # matches what actually came back — nothing is hidden by the formatting:
-    #   - all 4 metadata fields (name, manager, project, technology)
-    #   - the full page_content card (the sentence that was embedded)
-    #   - two scores, so the ranking is not a black box:
-    #       distance  -> raw L2 distance (question vs card vector). LOWER = closer.
-    #       relevance -> LangChain's normalized 0..1 score.         HIGHER = better.
-    #     They mirror each other: small distance <=> high relevance.
+    # We print the full card + both scores so the ranking is not a black box:
+    #   distance  -> raw L2 distance (question vs card vector). LOWER = closer.
+    #   relevance -> LangChain's normalized 0..1 score.         HIGHER = better.
     while True:
         query = input("\nSemantic search test — enter a question (or 'q' to quit): ")
         if query.lower() == "q":
             break
         print(f"\nSemantic search test — query: {query!r}")
 
-        # (Document, distance) pairs — distance is what Chroma actually ranks by.
         scored = store.similarity_search_with_score(query, k=3)
-        # (Document, relevance 0..1) — same order; higher = more relevant.
         relevances = dict(
             (d.metadata["name"], r)
             for d, r in store.similarity_search_with_relevance_scores(query, k=3)
@@ -129,8 +140,6 @@ if __name__ == "__main__":
             m = doc.metadata
             rel = relevances.get(m["name"], float("nan"))
             print(f"\n  #{rank}  distance={distance:.4f}  relevance={rel:.3f}")
-            print(f"      name       : {m['name']}")
-            print(f"      manager    : {m['manager']}")
-            print(f"      project    : {m['project']}")
-            print(f"      technology : {m['technology']}")
-            print(f"      card       : {doc.page_content}")
+            print(f"      name : {m['name']}")
+            print(f"      meta : { {k: v for k, v in m.items() if k != 'name'} }")
+            print(f"      card : {doc.page_content}")
