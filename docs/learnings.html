@@ -1021,6 +1021,21 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       <p class="q">Q: What is the most important design lesson from this project?</p>
       <p class="a">A: The key lesson is that retrieval and generation should be separated clearly. The router decides which search path to use, Python executes the exact logic, and the LLM only formats or explains the result. This makes the system more reliable: the count comes from Python, the exact employee match comes from metadata filters, and the model never has to “guess” its way through a fact it should not invent.</p>
     </div>
+
+    <div class="qa">
+      <p class="q">Q: What embedding model did you use, and why did you choose it?</p>
+      <p class="a">A: I used <code>all-MiniLM-L6-v2</code> from SentenceTransformers. It is a compact, local, CPU-friendly sentence embedding model that is fast to load and good enough for short employee cards. In this project, the data is small and the questions are usually about names, manager, project, technology, and fuzzy concept matching like “automation” or “network reliability,” so we did not need a huge premium model. The most important practical reasons were offline use, no API cost, and low latency on a local machine.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What dimension does it have, and how does that affect retrieval quality?</p>
+      <p class="a">A: It produces 384-dimensional vectors. That is relatively small compared with larger models like OpenAI’s 1536-dimensional embeddings, but it is still rich enough for this use case. A smaller vector means faster computation and lower memory use, while a larger vector can capture more nuance in long or complicated text. For short employee cards, 384 dimensions is a good trade-off: it is fast, robust, and still captures the semantic relationship between queries like “automation” and “scripting.” The quality is good enough for this domain because the real accuracy comes from hybrid retrieval as well.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: What alternatives did you consider, and why did you finalize this one?</p>
+      <p class="a">A: I considered larger local models such as <code>all-mpnet-base-v2</code> and cloud models like OpenAI <code>text-embedding-3-small</code> / <code>text-embedding-3-large</code>. The larger models are often stronger on nuanced semantics, but they are heavier, slower, and sometimes harder to run locally. The cloud options are easier in terms of raw quality but require API access and cost. For this project, the deciding factor was local offline operation plus simplicity: I needed a model that could run on CPU, stay inside the developer environment, and work reliably behind the corporate proxy. <code>all-MiniLM-L6-v2</code> gave the best balance of quality, speed, cost, and operational simplicity, so I finalized it.</p>
+    </div>
   </section>
 
   <section id="chunking-strategies">
