@@ -1075,6 +1075,16 @@ aggregate  -> COUNT how many match, return a number  <span class="ok">(NEW)</spa
       <p class="q">Q: What is the simplest decision rule I can reuse elsewhere?</p>
       <p class="a">A: If the content is already a self-contained unit, keep it as one chunk. If it is long and structured, chunk by section or module. If it is short-form Q&amp;A, use one Q&amp;A pair per chunk. If it is a record-based dataset, keep one record per chunk and attach metadata. That rule usually beats arbitrary token-size chunking.</p>
     </div>
+
+    <div class="qa">
+      <p class="q">Q: Walk me through a real query end-to-end: “Tell me details about Vignesh.”</p>
+      <p class="a">A: First, every employee row is turned into one document in <code>src/data.py</code>. That means the database does not store random text chunks; it stores one complete employee card with a real identity field like <code>name = "Vigneshwar B"</code>. When the user asks “Vignesh,” the router in <code>src/retrieval.py</code> reads the schema and decides this is probably a name lookup, not a project or technology query. Then the guardrail function <code>resolve_value()</code> compares the typed value against the real stored names using <code>difflib</code>. It sees that <code>Vignesh</code> is closest to <code>Vigneshwar B</code> and snaps it to the real value. Only after that does Python run the metadata lookup, e.g. <code>where={"name": "Vigneshwar B"}</code>, and fetch the exact employee record. That is why the system can handle partial or fuzzy names without guessing. The LLM never blindly “knows” the correct answer; it simply formats the retrieved record into a natural answer.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Q: How does the LLM know “Vignesh” is a name, and why does metadata know it needs to search for Vignesh?</p>
+      <p class="a">A: The router prompt explicitly tells the LLM the schema: there is an identity column, it is called <code>name</code>, and the known values include real employee names. Because of that, the model is steered toward a structured response like <code>{"route":"metadata","field":"name","value":"Vignesh"}</code> instead of treating it as a project or technology token. Then Python validates that proposed value against the real values list. The metadata layer knows it should search for <code>Vignesh</code> as a name because the schema says the identity column is the name field, and the real data already contains the exact full names. The fuzzy snap is what converts the partial user input into the exact stored record.</p>
+    </div>
   </section>
 
   <section id="glossary">
